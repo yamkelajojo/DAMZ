@@ -17,6 +17,11 @@ The Admin service is the **single bounded, Tor-hidden service** (ADR-0001) autho
 
 **Hard constraint**: **Holds zero rows of order, message, or proof data.** A startup check enforces this (see §4.2).
 
+The five Admin tables specified in §4 are a separate Rust/SQLite schema, not part of the
+19-table client-side WatermelonDB schema. Similarly named client mirrors are separate
+records; the Admin API contract, rather than a shared mobile schema, connects them
+(ADR-0007, ADR-0043).
+
 **Stack**: Rust + Axum + SQLCipher (via `sqlx` with `sqlcipher` feature) + `arti` for Tor.
 
 ---

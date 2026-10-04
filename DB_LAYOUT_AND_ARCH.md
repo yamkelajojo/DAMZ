@@ -40,9 +40,12 @@ There are two apps and one service:
 - **Admin service** (`services/admin`, Tor-hidden) — the only server. Registry, bans,
   strikes, disputes, settings. It never holds order, chat, or proof content (ADR-0001).
 
-`packages/db` defines **every table once**. Each app installs the set it needs, and each
-device writes only the columns it owns. The rest are NULL. Every table below is annotated
-with who writes it:
+The client-side WatermelonDB schema contains **19 tables** (listed in §§2–4).
+`packages/db` defines that client schema; each app installs its required table set, and
+each device writes only the columns it owns. The Admin service keeps a separate Rust/SQLite
+schema (see §8), not a third mobile install set. Domain concepts mirrored between client
+and server are separate stored records; the service contract is defined by ADR-0007.
+Every client table below is annotated with who writes it:
 
 > **✍️ Owner** — the device allowed to write a column or table.
 > **👁️ Mirror** — read-only on the device; the admin service is the source of truth.
@@ -513,7 +516,10 @@ Two notes the v1 document got wrong or left open:
 
 ## 8. The admin service
 
-Tor-hidden **Rust + Axum** process, one SQLCipher file in WAL mode (Q18, ADR-0007). Tables:
+Tor-hidden **Rust + Axum** process, one SQLCipher file in WAL mode (Q18, ADR-0007). The five
+tables shown below form a separate Admin-service schema; they are not among the 19
+client-side WatermelonDB tables in §§2–4. Similarly named mirror tables on devices are
+distinct records. The service uses the separate API contract described in ADR-0007.
 
 ```sql
 CREATE TABLE admin_identity (      -- exactly one admin; you

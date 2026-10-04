@@ -249,6 +249,59 @@ a dispute outcome, and exact delivery coordinates as a persisted value.
 
 ---
 
+## Post-refinement addendum — schema inventory reconciliation (ADR-0043)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted documentation decision; implementation deferred to the schema phase.
+
+### C13 — Client/Admin schema inventory and validator disagree
+
+**Observed state**:
+
+- `DB_LAYOUT_AND_ARCH.md` §§2–4 and `packages/db/OWNERSHIP_CONTRACT.md` enumerate the
+  same 19 client-side tables.
+- `packages/db/src/schemas/schema.ts`, `packages/db/src/models/index.ts`, and
+  `packages/types/src/index.ts` currently implement only 16; `swaps`, `exchange_offers`,
+  and `swap_events` are absent from those artifacts.
+- `ROADMAP.md` stated that the WatermelonDB schema contains 20 tables, but no twentieth
+  client table is defined in the v2 layout or ownership contract.
+- `services/admin/SPEC.md` defines five separate Admin-service tables. The refinement
+  statement that Admin reuses the client schema types conflicts with ADR-0007's separate
+  Rust/API contract.
+- `packages/db/scripts/validate-schema.ts` searches for SQL `CREATE TABLE` statements in
+  a TypeScript `Schema(...)` file, so its current parsing strategy does not validate the
+  actual client schema.
+
+### Resolution
+
+Following ADR-0043, the canonical client-side inventory is 19 tables: the 16 implemented
+client tables plus the three converter tables already approved in v2. The Admin service
+has a separate server-side schema; its five tables are not part of the mobile table count.
+The roadmap count is corrected to 19. Admin/client interoperability is through the service
+API contract, not shared WatermelonDB schema artifacts. No twentieth client table is
+introduced, and the three approved converter tables are not removed.
+
+### Alternatives considered
+
+- Keep the roadmap count at 20 by inventing or inferring a client table — rejected because
+  no such table is defined in v2.
+- Count Admin-service tables in the client schema — rejected because the Admin database is
+  separate and is not installed on Customer or Runner devices.
+- Remove converter tables from v2 — rejected because they are already specified in the
+  approved layout and ownership contract.
+
+### Consequences and follow-up
+
+The schema implementation must add the three documented converter tables using an
+additive migration; the validator and schema-parity tests must inspect the real TypeScript
+schema. These implementation steps are deferred until after the documentation review gate.
+Open questions OQ-SCHEMA-001 and OQ-SCHEMA-002 in ADR-0043 have owner Admin/Developer and
+must be resolved before the Phase 1 schema migration/validation test gate. No TODOs are
+introduced by this addendum.
+
+---
+
 ## Decision Log
 
 | ID | Decision | Status |

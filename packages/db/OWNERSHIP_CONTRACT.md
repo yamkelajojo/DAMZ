@@ -13,6 +13,11 @@ This document defines the **enforceable ownership contract** for the DAMZ databa
 
 **Core Principle**: Every column has exactly one writer. All other devices/services are read-only mirrors.
 
+This contract covers the **19 client-side WatermelonDB tables**. The Rust Admin service
+uses a separate server-side schema and API contract (ADR-0007, ADR-0043); Admin-role
+entries here describe authority for mirrored client records, not a shared WatermelonDB
+schema.
+
 ---
 
 ## 2. Write Permission Matrix

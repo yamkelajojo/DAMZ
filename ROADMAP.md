@@ -20,7 +20,7 @@
 **Goal**: Complete, validated, tested database schema package published and consumable by apps.
 
 **Deliverables**:
-- `packages/db` with full WatermelonDB schema (all 20 tables)
+- `packages/db` with the full client-side WatermelonDB schema (all 19 tables, including the three documented converter tables)
 - `validate-schema.ts` script passing
 - `MIGRATION_STRATEGY.md` implemented (migration 0001_initial)
 - `OWNERSHIP_CONTRACT.md` with TypeScript enforcement + unit tests
