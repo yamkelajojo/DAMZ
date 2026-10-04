@@ -2,7 +2,9 @@
 
 **Started**: 2026-10-04
 **Method**: `grill-with-docs` (grilling + domain-modeling). Decisions are worked as a
-design tree in rounds. Each round asks the whole **frontier** — the questions whose
+design tree in rounds.
+**Status**: all four rounds answered and the layout confirmed by the user (2026-10-04). The agreed layout is written up in
+`DB_LAYOUT_AND_ARCH.md` v2. Each round asks the whole **frontier** — the questions whose
 prerequisites are already settled. This file is updated after every answer.
 
 **Source documents under review**
@@ -22,11 +24,11 @@ prerequisites are already settled. This file is updated after every answer.
 | C3 | Identity tables | `customer_identity`, `runner_identity` | single `identity` | DID + pseudonym |
 | C4 | DID method | `did:key` / `did:ethr` | — | `@credebl/ssi-mobile` is **Hyperledger Indy** based |
 | C5 | Monero scope | "Prepared, not active" | Payment tested end-to-end | Monero core to order lifecycle |
-| C6 | Message retention | 90 days | **30 days** | — |
+| C6 | Message retention | 90 days | **30 days** | — | ✅ resolved by Q9 (messages 30d, orders 90d, freeze on dispute) |
 | C7 | Cancellation | only **before payment** | "**Any → cancelled**" | — |
 | C8 | Catalog domain | 7 grocery items | — | titled "Medicine & Herb" |
 | C9 | Customer strikes | Local on device; admin issues via dashboard | — | local-only can't receive admin strike |
-| C10 | Proof key derivation | HKDF with an undefined `masterKey` IKM | — | Both derive "from the order ID" |
+| C10 | Proof key derivation | HKDF with an undefined `masterKey` IKM | — | Both derive "from the order ID" | ✅ resolved by Q12 (per-order random key over chat) |
 | C11 | Runner delivery address | customer row has address; **runner row has none** | — | Runner must reach the address |
 | C12 | Walk-away bug | `unsafeResetDatabase()` used where `VACUUM` intended — wipes the DB | — | — |
 
@@ -71,101 +73,178 @@ address is only ever in the encrypted Signal chat. Resolves **C11**.
 
 ---
 
-## Round 2 — Admin scope, payment seam, lifecycle
+## Round 2 — Database layout — ANSWERED (2026-10-04)
 
-**➡️ Recommendations below; answer by number.**
+**Answers: Q7 → B · Q13 → A · Q14 → A · Q15 → B · Q9 → A · Q12 → A**
 
-### Q7 — What exactly lives on the admin service?
+### Q7 → B. Admin service holds registry, bans, disputes, strikes, settings
 
-Q2 established the server exists. Now scope its data. Candidates: runner registry,
-strikes, disputes, platform settings, ban list, runner approval. Order/chat data is
-excluded by ADR-0001.
+- Server tables: `admin_identity`, `runner_registry`, `disputes`, `strikes`,
+  `platform_settings`.
+- A dispute receives only voluntarily shared evidence: `order_id`, `proof_cid`, and the
+  per-order proof key. Never order or chat content.
+- Matches ADR-0001 as written; no ADR change needed.
+- Device-side `strikes` / registry / settings become **read-only mirrors** (see Q11).
 
-- **A. Registry + ban list only.** Minimal: approve/ban runners.
-- **B. Registry + ban list + disputes + strikes + settings** (everything admin-side
-  except order/chat content).
-- **C. A + disputes** (registry, bans, disputes), no strikes/settings.
+### Q13 → A. One wide `orders` table, per-column ownership
 
-**➡️ Recommendation: B**, but with disputes holding *only* the evidence the customer
-chooses to share (proof CID + order ID), never auto-synced order data.
+- `orders` is the union of both sides' columns; each app writes only the columns it owns.
+  The per-column ownership matrix becomes part of the schema documentation.
+- Runner-only columns (e.g. `delivery_geohash`) are NULL on the Customer device;
+  Customer-only columns (`monero_subaddress`, `payment_txid`, `expires_at`) are NULL on
+  the Runner device.
+- Supersedes the two separate `orders` tables in `DB_LAYOUT_AND_ARCH.md`; **C2 closed**.
 
-**Answer:** _[ ]_
+### Q14 → A. Runner publishes a signed price list; the order freezes a snapshot
 
-### Q8 — What is the concrete "prepared for Monero" contract?
+- New `runner_prices`: per item — price, availability, DID signature, `fetched_at`.
+  The Runner writes its own rows; the Customer caches other Runners' rows read-only.
+- New `order_items`: one row per line, carrying the unit price at order time.
+  `orders.total_zar` is derived from that snapshot and never moves afterwards.
+- Ordering needs the list *before* payment, so the Customer app orders from its cache and
+  refreshes the cache when online.
+- Recorded as ADR-0004.
 
-Q4 says mock now, real later. Define the seam now so it is easy to swap.
+### Q15 → B. Messages store the decrypted body; the envelope lives only until sent
 
-- **A. A `PaymentProvider` interface** with `requestPayment(order) → {subaddress, amount, expiresAt}`
-  and `checkStatus(order) → 'pending'|'confirmed'|'expired'`; v1 ships `MockPaymentProvider`,
-  v2 ships `MoneroPayProvider`.
-- **B. Just keep the schema fields** (`monero_subaddress`, `payment_txid`) with no interface.
-- **C. Interface + feature flag + a `payment_events` audit table** so status history is recorded.
+- `messages.body` (SQLCipher-protected) is the readable text. `messages.envelope` is
+  nullable and cleared once the send succeeds; until then it is the retry payload.
+- Delivery state + attempt count live on the message row, so there is no separate outbox
+  table.
+- "Zero plaintext at rest" in `DB_ARC` still holds — the plaintext is inside the
+  SQLCipher file, not beside it.
+- History stays readable after a Signal session is terminated.
 
-**➡️ Recommendation: C.** The interface is the cheap part; the audit table is what
-makes the later swap debuggable. Mock provider returns deterministic fake data.
+### Q9 → A. Messages 30 days, orders 90 days, frozen under an open dispute
 
-**Answer:** _[ ]_
+- Purge keys off a per-row `purge_after`; presence of an open dispute freezes the row.
+- Supersedes the 90-day message window in `DB_LAYOUT_AND_ARCH.md`; **C6 closed**.
+- Purge must be a real `DELETE` plus periodic `VACUUM` — WatermelonDB's `markAsDeleted`
+  tombstones never clear without a sync server. **This is the C12 fix**;
+  `unsafeResetDatabase()` was never the vacuum call.
 
-### Q9 — Retention windows (resolves C6)
+### Q12 → A. Per-order random proof key, sent over the order chat
 
-`DB_LAYOUT` says orders/messages 90 days; `DB_ARC` says messages 30 days. Pick one.
+- `orders.proof_key` exists on both devices (SQLCipher-protected). The photo itself is
+  fetched on demand and never kept locally.
+- The Admin can decrypt a bundle only when the Customer hands over that one key, which is
+  exactly the Q7 dispute evidence.
+- Recorded as ADR-0003; **C10 closed**.
 
-- **A. Orders 90d, messages 30d** (as `DB_ARC`).
-- **B. Orders 90d, messages 90d** (as `DB_LAYOUT`).
-- **C. Orders 30d, messages 30d** — aggressive minimum retention.
+### Derived, not asked (follow from Q3 / Q5 / Q6 — veto in Round 3 if wrong)
 
-**➡️ Recommendation: C for messages, and 90d for the order record only if a dispute
-may still be open.** Simplest defensible rule: messages purge **30 days** after order
-completion; order rows purge **90 days**; anything under an open dispute is frozen
-until resolved. Ships the principle of data minimization.
+- One `identity` row per device (self) plus `contacts` keyed by **DID**, each holding the
+  Signal address and onion address. `customer_identity` / `runner_identity` /
+  `runner_contacts` are superseded; **C3 closed concretely**.
+- Order IDs are random UUIDv4 minted by the Customer; the Runner adopts the ID verbatim.
+- The Customer device keeps **no** delivery-address column — the address lives only in the
+  order chat (Q6). `delivery_address_type` / `delivery_address_value` are dropped; the
+  Runner keeps a coarse `delivery_geohash`.
+- `catalog` splits into a fixed 7-row `catalog_items` reference (id + label, seeded) and
+  the Runner-owned price rows in `runner_prices`.
 
-**Answer:** _[ ]_
+---
 
-### Q10 — Cancellation semantics (resolves C7)
+## Round 3 — Lifecycle, mirrors, remaining shape — ANSWERED (2026-10-04)
 
-`DB_LAYOUT`: cancel only before payment. `DB_ARC`: "any → cancelled".
+**Answers: Q8 → C · Q10 → C · Q11 → B · Q17 → A · Q18 → A · Q20 → A**
 
-- **A. Before payment only** — after `paid`, the only exit is a dispute/refund path.
-- **B. Any state → `cancelled`** — parties can always abandon.
-- **C. Split: customer may cancel until `accepted`; after that, only a dispute.**
+### Q8 → C. Payment seam is an interface plus a `payment_events` audit table
 
-**➡️ Recommendation: C.** Once a runner has accepted and is travelling, unilateral
-cancellation is abuse. Freezing it at `accepted` matches the strike model's intent.
+- `PaymentProvider` interface: `requestPayment(order) → {subaddress, amount, expiresAt}`
+  and `checkStatus(order) → pending | confirmed | expired`; `MockPaymentProvider` in v1.
+- `payment_events` (requested / seen / confirmed / expired, with timestamps) is written by
+  the device that observes the transition — the Customer device in v1.
+- No server involvement, so ADR-0001 is untouched: the gateway is not the admin service.
 
-**Answer:** _[ ]_
+### Q10 → C. Cancellation is free until `accepted`; after that, a dispute
 
-### Q11 — Customer strikes model (resolves C9)
+- Transition ownership becomes explicit:
+  | Edge | Actor |
+  |---|---|
+  | `pending_payment → paid` | Customer |
+  | `pending_payment / paid → cancelled` | Customer (any time before acceptance) |
+  | `pending_payment / paid → cancelled` with `cancel_reason = 'cannot_fulfil'` | Runner |
+  | `paid → accepted` | Runner |
+  | `accepted → in_transit → delivered` | Runner |
+  | `delivered → confirmed` | Customer |
+  | `pending_payment → expired` (payment window lapses) | whichever device observes it |
+  | `accepted ∈ open dispute` | Customer raises, Admin adjudicates |
+- New columns: `cancelled_by`, `cancel_reason`. `dispute_state` becomes a separate field
+  mirrored from the admin service, **not** a status value — a dispute does not stop the
+  delivery state machine, it freezes purge and adjudicates afterwards. **C7 closed.**
 
-`DB_LAYOUT` puts strikes locally on the customer device and also lets the admin issue
-them — a local-only table cannot receive an admin action.
+### Q11 → B. Devices keep read-only mirrors, with a `sync_state` cursor
 
-- **A. Server-authoritative.** Strikes live only on the admin service; devices pull
-  their own strikes. 3 strikes = ban.
-- **B. Local only.** The device records its own; no cross-device meaning.
-- **C. Server-authoritative + local cache** for offline display.
+- `sync_state` (source PK, `last_success_at`, `cursor`, `last_error`) records the last
+  successful pull per source: `strikes`, `settings`, `directory`, `disputes`.
+- Mirrored read-only: `strikes`, `platform_settings`, `runner_directory`, `disputes`.
+  Offline, the app shows and enforces the last known state; it can never write these.
+- `disputes` is the one mirror with a local draft row (a Customer raises a dispute
+  offline, it uploads when Tor is back). **C9 closed.**
 
-**➡️ Recommendation: A.** Strikes are a moderation control, so they must be
-authoritative somewhere the customer cannot edit. Since the admin service exists
-(ADR-0001), put them there and have devices fetch on launch.
+### Q17 → A. One shared `proof_bundles` table
 
-**Answer:** _[ ]_
+- Runner-written: `cid`, `captured_at`, `capture_geohash`, `signature_valid`, `uploaded_at`.
+- Customer-written: `verified_at`, `verification_result`, `verification_note`.
+- `orders.proof_cid` stays as the pointer; `orders.proof_key` holds the key (Q12).
+  A rejected proof is re-uploaded as a new `proof_bundles` row, leaving the order intact.
 
-### Q12 — Proof-bundle key derivation (resolves C10)
+### Q18 → A. Admin service stores SQLite + SQLCipher
 
-`DB_LAYOUT` derives the AES key from the order ID "via HKDF" but never defines the IKM
-(`masterKey`). The spec claims both parties derive it from the order ID alone — which
-would mean the order ID *is* the secret, and order IDs aren't secret.
+- One encrypted file, WAL mode, single process, single admin. Backup = copy the file.
 
-- **A. Per-order random key**, generated by the runner, sent to the customer over the
-  encrypted Signal channel (key never touches IPFS/relay).
-- **B. HKDF from a shared Signal-session secret** (both sides already share it).
-- **C. Hash of order ID** (as literally written) — weakest, effectively no protection.
+### Q20 → A. The Customer device has no delivery-address column
 
-**➡️ Recommendation: A.** Generate a fresh AES-256 key per proof bundle, send it in
-the E2E channel, and store it only in the order row. The order ID is an identifier,
-not a secret. This also makes dispute-sharing explicit (you hand over the key).
+- `delivery_address_type` / `delivery_address_value` are dropped. The address exists only
+  as the body of an order-chat message (Q6, ADR-worthy consistency with the proof-key
+  design: exactly one copy, in exactly one place).
 
-**Answer:** _[ ]_
+### Derived, added during Round 3
+
+- `wallet_metadata` belongs on the **Runner** device: the Runner is the payee, so the
+  subaddress on an order is theirs (confirmed by Q22).
+- `runner_registry.total_orders_completed` is **dropped**: the admin service cannot count
+  orders without holding order data, which ADR-0001 forbids.
+- Exact delivery coordinates are never persisted — they exist in memory only while
+  generating the ZK location proof; the database keeps a coarse geohash.
+
+---
+
+## Round 4 — Two loose ends — ANSWERED (2026-10-04)
+
+**Answers: Q21 → A · Q22 → A**
+
+### Q21 → A. Runners never see Customer strikes
+
+- `strikes` is mirrored read-only onto the **Customer's own device only**. The Runner app
+  ships without the table, so the admin service never becomes a lookup oracle that maps
+  runners to the customers they are about to serve.
+- Abuse is handled reactively: a Runner contacts the Admin out of band, the Admin issues a
+  strike, the Customer's device mirrors it.
+- Recorded as **ADR-0005**, including the honest limitation: a Customer can rotate to a new
+  `did:key` to escape strikes, just as a Runner can escape a ban.
+
+### Q22 → A. The wallet lives on the Runner device
+
+- The Runner is the payee, so the subaddress on an order is theirs and `wallet_metadata`
+  lives on their device only. No server-side hot wallet, no Customer wallet in v1.
+- The Customer app keeps `payment_events` and nothing wallet-shaped.
+
+---
+
+## Session closed — frontier empty (2026-10-04)
+
+Every branch of the database-layout design tree has an answer. 20 decisions recorded, 5 ADRs
+written, 3 glossary terms added, 10 of 12 contradictions closed (C1–C11; **C12** was not a
+contradiction but a bug and is fixed in the v2 layout).
+
+**Deliverable**: `DB_LAYOUT_AND_ARCH.md` v2 supersedes v1 and Part I of
+`DB_ARC_and_TEST_PLANNING.md`.
+
+**Explicitly out of v1** (recorded in §9 of the v2 layout, so nothing is silently assumed):
+runner→admin reports, ratings/reputation, inventory counts, refunds as anything other than
+a dispute outcome, and exact delivery coordinates as a persisted value.
 
 ---
 
@@ -179,17 +258,28 @@ not a secret. This also makes dispute-sharing explicit (you hand over the key).
 | Q4 | Monero mocked but structurally prepared | ✅ |
 | Q5 | Identity via `did:key` | ✅ B |
 | Q6 | Coarse geohash local, exact address in chat | ✅ C |
-| Q7 | Admin service data scope | ⏳ open |
-| Q8 | Payment provider seam | ⏳ open |
-| Q9 | Retention windows | ⏳ open |
-| Q10 | Cancellation semantics | ⏳ open |
-| Q11 | Customer strikes model | ⏳ open |
-| Q12 | Proof-bundle key derivation | ⏳ open |
+| Q7 | Admin service data scope | ✅ B |
+| Q8 | Payment seam + `payment_events` audit | ✅ C |
+| Q9 | Retention: msgs 30d / orders 90d / dispute freeze | ✅ A |
+| Q10 | Cancellation: free until accepted; dispute after | ✅ C |
+| Q11 | Read-only moderation mirrors + `sync_state` | ✅ B |
+| Q12 | Per-order random proof key over chat | ✅ A |
+| Q13 | One wide `orders` table, per-column ownership | ✅ A |
+| Q14 | Runner publishes price list; order freezes snapshot | ✅ A |
+| Q15 | Decrypted body + outbox-only envelope | ✅ B |
+| Q17 | Shared `proof_bundles` table | ✅ A |
+| Q18 | Admin service engine: SQLite + SQLCipher | ✅ A |
+| Q20 | No address column on the Customer device | ✅ A |
+| Q21 | Runners never see customer strikes | ✅ A (ADR-0005) |
+| Q22 | Wallet lives on the Runner device | ✅ A |
 
 ## ADRs created
 
 - `docs/adr/0001-bounded-admin-service.md`
 - `docs/adr/0002-did-key-identity.md`
+- `docs/adr/0003-proof-bundle-key.md`
+- `docs/adr/0004-published-prices.md`
+- `docs/adr/0005-strike-visibility.md`
 
 ## Glossary created
 
