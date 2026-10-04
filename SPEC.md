@@ -482,9 +482,9 @@ ECDSA P-256 in the iOS Secure Enclave or the Android Keystore (StrongBox-eligibl
 **Source**: https://www.npmjs.com/package/@ajna-inc/poe-proofs
 **Version**: 0.2.1
 
-This npm package provides zero-knowledge proofs for time and location verification, POE Protocol compatible. It supports React Native with full proof generation using device sensors (GPS, magnetometer, barometer) and blockchain anchoring. Node.js supports verification using `snarkjs`.
+This npm package provides zero-knowledge proofs for time and location verification, POE Protocol compatible. It supports React Native with full proof generation using device sensors (GPS, magnetometer, barometer) and blockchain anchoring. Node.js supports verification using `snarkjs`. This section documents the existing CPU prover/baseline path; Mopro/GPU is an additional, not-yet-validated backend under ADR-0030.
 
-**Installation**:
+**Installation example**:
 
 ```bash
 npm install @ajna-inc/poe-proofs
@@ -545,7 +545,7 @@ Key results:
 - Uses IEEE 754-compliant floating-point zk-SNARK circuits
 - 64 constraints per operation for 2¹⁵ single-precision floating-point multiplications
 
-**DAMZ integration**: The runner's app uses `@ajna-inc/poe-proofs` (which implements the ZKLP paradigm) to generate a proof that their GPS coordinates fall within a geofenced radius of the delivery address. The customer's app verifies this proof without learning the runner's actual coordinates.
+**DAMZ integration**: The Zakura-optimized `@ajna-inc/poe-proofs` CPU path remains the fallback for the Runner's proof that GPS coordinates fall within the delivery geofence. The optional Mopro/GPU backend (ADR-0030) may be used only after proving the identical statement and verifying with the same key. The Customer verifies the proof without learning the Runner's actual coordinates.
 
 ### 6.4 Zakura Common (Mobile ZK Acceleration)
 
@@ -559,17 +559,42 @@ Zakura Common is a set of cryptographic and protocol libraries for the Zcash eco
 
 Open-sourced under MIT/Apache 2.0 dual license.
 
-**Relevance**: Zakura's optimization techniques for mobile ZK proof generation are directly applicable to DAMZ's location proofs. If `@ajna-inc/poe-proofs` proves too slow on mid-range devices, Zakura Common's floating-point SNARK optimizations can be ported.
+**Relevance**: Zakura's optimization techniques for mobile ZK proof generation are directly applicable to DAMZ's location proofs. If `@ajna-inc/poe-proofs` proves too slow on mid-range devices, Zakura Common's floating-point SNARK optimizations can be ported. This optimized CPU path remains the fallback under ADR-0030.
+
+#### Mopro/GPU Optional Backend (ADR-0030)
+
+Mopro is an additional candidate prover backend, not a replacement for Zakura or the CPU
+path. Its current mobile documentation describes native adapters/bindings and GPU
+acceleration for operations such as MSM; the actual speed-up depends on the circuit and
+must be benchmarked on DAMZ's own location circuit. Mopro compatibility with the exact
+DAMZ circuit, proof parameters, and existing verifier remains unvalidated.
+
+- Enable Mopro/GPU only behind a capability check and feature gate after Phase 6 proves
+  the same circuit/public-input contract and verifies its output with the existing
+  customer/Admin verifier.
+- Keep all proving local. Coordinates, witnesses, proving keys, and proofs are never sent
+  to a remote accelerator or service.
+- On an unsupported device, GPU error, resource/thermal pressure, or invalid GPU proof,
+  fall back to the Zakura-optimized CPU prover at the requested precision. If the Zakura
+  port is not ready, use the unmodified `@ajna-inc/poe-proofs` CPU path. On CPU proving or
+  verification failure, retain ADR-0027's lower-precision CPU retry; if CPU proving still
+  fails or exceeds five seconds, use coarse geohash only (ADR-0027). Never accept an
+  invalid proof.
+- No dependency is installed or pinned until the circuit compatibility, parity,
+  performance, and native buffer-handling gates in ADR-0030 pass.
+
+**Sources**: Mopro mobile-prover overview and GPU description (https://zkmopro.org/docs/intro/);
+circuit-specific benchmark guidance (https://zkmopro.org/docs/performance/).
 
 ### 6.5 The Complete Location Lock Flow
 
 1. **Capture**: Runner takes photo of the delivered goods at the delivery location.
 2. **Sign**: `@realreel/photo-attest` signs the photo hash with a Secure Enclave/StrongBox-backed ECDSA P-256 key. The signature covers: photo hash + order ID + timestamp.
-3. **Location proof**: `@ajna-inc/poe-proofs` generates a ZK proof that the runner's GPS coordinates are within X meters of the delivery address. The proof does not reveal the coordinates.
-4. **Encrypt**: The signed photo + ZK proof bundle is encrypted with AES-256-GCM using a key derived from the order ID via HKDF.
+3. **Location proof**: Use Mopro/GPU only when the exact circuit and device pass ADR-0030's compatibility gate; otherwise use the Zakura-optimized CPU prover (`@ajna-inc/poe-proofs` CPU interim). If CPU proving/verification fails, retry at lower precision; if CPU proving still fails or exceeds five seconds, use coarse geohash only (ADR-0027). Each ZK backend proves the same statement and uses the existing verifier; the proof does not reveal the coordinates.
+4. **Encrypt**: The delivery evidence bundle (signed photo, attestation, and the location result actually produced) is encrypted with AES-256-GCM using the order-derived key. A coarse-geohash fallback is explicitly non-ZK; it must never be described as a ZK proof.
 5. **Store**: The encrypted bundle is uploaded to IPFS via `@ipfs-meshkit/meshkit` (S3 backend, no daemon). The CID is stored locally.
 6. **Share**: The CID is sent to the customer via the Signal Protocol messaging layer.
-7. **Verify**: Customer's app retrieves the bundle from IPFS, decrypts locally, verifies the ECDSA signature (device attestation), and verifies the ZK location proof. The customer learns only: "The runner was within X meters of the delivery point at time T."
+7. **Verify**: Customer's app retrieves the bundle from IPFS and decrypts locally, verifies the ECDSA signature (device attestation), and verifies the ZK proof when one was produced. In coarse-geohash-only mode, it reports that no ZK proof was produced and applies only the existing coarse check; it must not claim ZK assurance.
 
 ---
 
@@ -666,7 +691,8 @@ Open-sourced under MIT/Apache 2.0 dual license.
 │                                                    │                │
 │                                          ┌─────────▼─────────────┐  │
 │                                          │ ZK Location Proof     │  │
-│                                          │ (@ajna-inc/poe-proofs)│  │
+│                                          │ Mopro/GPU opt-in;    │  │
+│                                          │ Zakura CPU fallback  │  │
 │                                          └─────────┬─────────────┘  │
 │                                                    │                │
 │                                          ┌─────────▼─────────────┐  │
@@ -702,9 +728,9 @@ wallet or wallet secrets for either app.
 1. Runner confirms order acceptance. The runner's app establishes a Signal Protocol session with the customer (if not already established).
 2. Runner procures the items (off-app — runner handles their own stock).
 3. Runner arrives at delivery location. Takes photo of the goods at the location.
-4. Runner's app generates a ZK location proof (coordinates within X meters of delivery address).
+4. Runner's app generates the ZK location proof using optional Mopro/GPU only after the ADR-0030 circuit/device gate; otherwise it uses Zakura/CPU (the original `@ajna-inc/poe-proofs` CPU path if needed). A CPU failure triggers the lower-precision retry, then coarse geohash only if CPU proving still fails or exceeds five seconds.
 5. Runner's app signs the photo hash with Secure Enclave key.
-6. Runner's app encrypts the proof bundle (photo + signature + ZK proof) with AES-256-GCM.
+6. Runner's app encrypts the delivery-evidence bundle (photo + signature + the location result produced) with AES-256-GCM; a coarse-geohash fallback is explicitly non-ZK.
 7. Runner's app uploads the encrypted bundle to IPFS via Meshkit. Receives CID.
 8. Runner's app sends the CID to the customer via the Signal Protocol messaging layer.
 
@@ -714,7 +740,7 @@ wallet or wallet secrets for either app.
 2. Customer's app retrieves the encrypted bundle from IPFS.
 3. Customer's app decrypts the bundle locally with the order-derived key.
 4. Customer's app verifies the ECDSA signature (device attestation — proves the photo was taken on a genuine device).
-5. Customer's app verifies the ZK location proof (proves the runner was within X meters of the delivery address).
+5. Customer's app verifies the ZK location proof when present; if the bundle explicitly records the coarse-geohash fallback, it performs only the existing coarse check and does not report it as ZK verification.
 6. Customer confirms receipt. The Signal Protocol session is terminated. The relay's message queue for this order is deleted.
 
 ---
@@ -798,7 +824,7 @@ wallet or wallet secrets for either app.
 | Track | Phases | Deliverable | Dependencies |
 |---|---|---|---|
 | **A: Transport + Messaging** | P1 + P2 | Tor daemon + Signal Protocol chat (E2EE over `.onion`) | `react-native-nitro-tor`, `react-native-libsignal-client` |
-| **B: Device Capabilities** | P3 + P4 + P5 | Monero payment (mock) + ZK location proof + Photo attestation | `react-native-mymonero-core`, `@ajna-inc/poe-proofs`, `@realreel/photo-attest` |
+| **B: Device Capabilities** | P3 + P4 + P5 | Monero payment (mock) + ZK location proof (Mopro/GPU optional; Zakura/CPU fallback) + Photo attestation | `react-native-mymonero-core`, `@ajna-inc/poe-proofs`, Mopro candidate, `@realreel/photo-attest` |
 | **C: Storage + Identity** | P6 + P7 | IPFS storage (Meshkit S3 + Helia flag) + `did:key` identity | `@ipfs-meshkit/meshkit`, `helia`, custom `did:key` impl |
 | **D: Server Infrastructure** | P9 | Discardable relay + AcceptXMR gateway + IPFS pinner (all `.onion`) | Rust, `axum`, `acceptxmr`, `minio`, `arti` |
 | **Integration** | P8 | Wire all tracks into complete order lifecycle + converter tabs | Tracks A–D complete |
@@ -813,7 +839,7 @@ wallet or wallet secrets for either app.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | `react-native-nitro-tor` battery drain | High | Foreground service with persistent notification; allow user to toggle Tor when idle |
-| ZK proof generation on low-end devices | Medium | Use `@ajna-inc/poe-proofs` with fallback to simpler location hash if proof fails |
+| ZK proof generation on low-end devices | Medium | Optional Mopro/GPU only after circuit-parity validation; retain Zakura-optimized CPU and the unmodified `@ajna-inc/poe-proofs` CPU interim path; coarse geohash is the final fallback |
 | AcceptXMR gateway downtime | High | Multiple custom Rust gateway instances on different `.onion` addresses; app discovers via IPNS |
 | Relay node compromise | Medium | Discardable relay design: no logs, no persistent state; multiple relays |
 | LNemail service shutdown | Low | LNemail is optional; app functions without email |
@@ -845,6 +871,8 @@ wallet or wallet secrets for either app.
 | ZK location | `@ajna-inc/poe-proofs` | https://www.npmjs.com/package/@ajna-inc/poe-proofs |
 | ZK location (paper) | ZKLP | https://eprint.iacr.org/2024/1842.pdf |
 | ZK acceleration | Zakura Common | https://www.chaincatcher.com/en/article/2286547 |
+| Mobile ZK backend / GPU | Mopro toolkit overview and GPU acceleration | https://zkmopro.org/docs/intro/ |
+| Mobile ZK benchmarks | Mopro circuit-specific performance guidance | https://zkmopro.org/docs/performance/ |
 | IPFS storage | `@ipfs-meshkit/meshkit` | https://github.com/IPFS-Meshkit/meshkit0 |
 | IPFS RN | Helia | https://helia.io |
 | Monero testnet | Stagenet | https://docs.getmonero.org |
@@ -856,12 +884,12 @@ wallet or wallet secrets for either app.
 
 ## 14. Conclusion
 
-DAMZ is technically feasible. Every component exists as working, auditable code. The integration surface is large but well-defined: Tor for transport, Signal Protocol for content encryption, DIDs for identity, Monero for payments, ZK proofs for location verification, and hardware-backed signing for photo authenticity.
+DAMZ is technically feasible. The core integration surface is defined: Tor for transport, Signal Protocol for content encryption, DIDs for identity, Monero for payments, ZK proofs for location verification, and hardware-backed signing for photo authenticity. Mopro/GPU remains an optional prover candidate until its exact circuit compatibility and performance gates pass; the Zakura/CPU path remains available.
 
 The critical engineering challenges are:
 
 1. **Making `react-native-nitro-tor` reliable on mobile** — battery, background execution, and connection resilience.
-2. **Making ZK location proofs run on mid-range Android devices** — `@ajna-inc/poe-proofs` is the starting point, but Zakura Common's optimizations may need porting.
+2. **Making ZK location proofs run on supported mobile devices** — benchmark the actual DAMZ circuit; Mopro/GPU is an additional candidate backend, while the Zakura-optimized CPU and original `@ajna-inc/poe-proofs` CPU path remain fallbacks.
 3. **Building the discardable relay** — a minimal Rust or Go service that runs behind Tor, stores nothing, and forwards encrypted blobs.
 4. **Deploying and maintaining the `.onion` infrastructure** — AcceptXMR gateway, IPFS pinner, relay nodes.
 

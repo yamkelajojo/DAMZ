@@ -382,8 +382,8 @@ $ cargo run --bin admin-cli -- dispute decrypt-proof --id dsp_abc123...
 → Downloads encrypted bundle from IPFS (via CID)
 → Decrypts with proof_key
 → Verifies photo attestation (C2PA + device attestation)
-→ Verifies ZK location proof
-→ Output: "Photo valid. Location proof valid (within 50m)."
+→ Verifies the ZK location proof when one is present; if the bundle records the coarse-geohash fallback, reports that it is non-ZK and does not claim ZK verification (ADR-0027/0030)
+→ Output for the ZK path: "Photo valid. Location proof valid (within 50m)."
 
 $ cargo run --bin admin-cli -- dispute resolve --id dsp_abc123... --ruling resolved --notes "Photo + ZK proof confirm delivery"
 → Status: resolved

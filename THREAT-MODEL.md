@@ -39,7 +39,7 @@
 | Tor transport | All network traffic | `react-native-nitro-tor` in-process daemon; no clearnet fallback |
 | Signal Protocol | Message content | Double Ratchet + X3DH + Sealed Sender; keys in Secure Store |
 | Monero payments | Payment metadata; Runner private view key | AcceptXMR gateway keeps the view key encrypted at rest in view-only config; no spend key |
-| ZK location proofs | Runner location | Proof reveals only "within radius"; coordinates never leave device |
+| ZK location proofs | Runner location and prover intermediates | Proof reveals only "within radius"; coordinates/witnesses stay on device. Optional Mopro/GPU must use the same circuit and existing verifier; Zakura/CPU remains fallback (ADR-0030) |
 | Photo attestation | Delivery evidence | C2PA + device attestation; hardware-bound signing |
 | IPFS storage | Proof bundles | Client-side AES-256-GCM; key sent separately over Signal chat |
 | Local storage | App data and wallet secrets | SQLCipher for app data; Keychain/Keystore at rest; native `SecureMemory` for wallet-secret access |
@@ -53,7 +53,7 @@
 |----------|-----------|-------------|
 | **Anonymity** | Tor + no accounts + DIDs | Traffic analysis, narvy SAST |
 | **Confidentiality (orders/chats)** | Signal Protocol + SQLCipher | libsignal test vectors, code review |
-| **Integrity (proofs)** | Hardware signing + ZK proofs | POE proof verification, attestation check |
+| **Integrity (proofs)** | Hardware signing + backend-independent ZK proof contract | Existing POE verifier accepts Mopro/GPU and Zakura/CPU output only after circuit/public-input parity tests; attestation check |
 | **Unlinkability (payments)** | Monero subaddresses per order | Subaddress derivation test vectors |
 | **Forward secrecy (chats)** | Signal Double Ratchet | Session re-keying tests |
 | **Ephemerality** | Auto-purge (30d msgs, 90d orders) | Purge job tests, dispute freeze tests |
@@ -162,6 +162,21 @@ service must distinguish `accepted` from app-reported `completed`; it must not r
 offline target as wiped. These controls reduce, but do not eliminate, operator error or
 Admin compromise.
 
+### 4.6 Optional Mopro/GPU Prover (ADR-0030)
+
+**Risk**: A mobile GPU prover or driver could mishandle circuit arithmetic, produce an
+invalid proof, stall under thermal/memory pressure, or leave location witnesses in
+accelerator buffers. A remote accelerator would disclose the witness and is outside the
+accepted design.
+
+**Controls and status**: Mopro/GPU is an additional on-device backend and stays disabled
+until DAMZ proves circuit/public-input parity, acceptance by the existing verifier,
+resource/thermal behavior, and native buffer handling on the supported device matrix.
+Invalid GPU output is rejected; the app falls back to Zakura/CPU, then the existing
+lower-precision CPU retry and coarse-geohash-only path as specified in ADR-0027. No raw
+coordinates, witnesses, or proving keys may be sent to a remote service or logged. If the
+platform cannot meet the privacy/buffer gate, use CPU only (OQ-ZK-PROVER-001/002).
+
 ---
 
 ## 5. Threat Model Validation
@@ -170,7 +185,7 @@ Admin compromise.
 1. Tor traffic analysis — confirm no clearnet leaks
 2. SQLCipher key extraction attempt on rooted device
 3. Signal session compromise (prekey reuse, forward secrecy)
-4. ZK proof soundness — synthetic sensor data attacks
+4. ZK proof soundness — synthetic sensor data attacks; cross-backend circuit/public-input parity, Mopro/GPU invalid-proof rejection and CPU fallback (ADR-0030)
 5. Monero subaddress linkability across orders
 6. Relay compromise simulation
 7. Admin service SQL injection, auth bypass, evidence tampering

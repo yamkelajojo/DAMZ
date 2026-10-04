@@ -472,6 +472,7 @@ ADR-0001, ADR-0007, and ADR-0041 are explicitly narrowed by ADR-0029 only to per
 | Q22 | Wallet was Runner-only | Superseded by ADR-0028 (Customer + Runner local wallets) |
 | Q23 | Customer and Runner each have an independent local Monero wallet | ✅ ADR-0028 |
 | Q24 | Remote wipe is app-data/key erasure on verified managed Android only; no full-device reset, iOS, or unmanaged Android | ✅ ADR-0029 |
+| Q25 | Mopro/GPU is an additional ZK prover; retain Zakura/CPU fallback | ✅ ADR-0030 |
 
 ## ADRs created
 
@@ -531,5 +532,87 @@ filename topic, and status. The five requested ADRs will use the newly available
 This is an identifier and reference migration only. No existing design decision is removed,
 reversed, or superseded by the renumbering. The updated ADR files and this mapping preserve
 traceability; all future in-repository references use the new IDs. ADR-0028 (Secure Memory)
-and ADR-0029 (Managed Android App-Data Remote Wipe) have since been added as separately
-reviewed directives. ADR-0030–0032 remain reserved for later directives.
+and ADR-0029 (Managed Android App-Data Remote Wipe) were subsequently added as separately
+reviewed directives. ADR-0030–0032 were reserved at the time of this reconciliation; ADR-0030
+was later assigned to the Mopro/GPU backend decision recorded in the C19 addendum below,
+while ADR-0031 and ADR-0032 remain reserved.
+
+---
+
+## Post-refinement addendum — optional Mopro/GPU ZK backend (ADR-0030)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted architecture decision; implementation deferred to Phase 6.
+
+### C19 — Mobile GPU backend scope and Zakura CPU fallback
+
+**Observed state**:
+
+- ADR-0019 selects a Zakura-optimized CPU prover path and says to retain the unmodified
+  `@ajna-inc/poe-proofs` CPU implementation if the Zakura port is delayed. Its performance
+  fallback and ADR-0027's ZK degradation path use coarse geohash when proof generation is
+  too slow or fails.
+- `ROADMAP.md` OQ-ROAD-001 asked whether to ship the baseline prover if Zakura is delayed;
+  it did not define how a mobile GPU backend would relate to the existing CPU path.
+- Mopro's official mobile overview documents a modular mobile proving toolkit, native
+  adapters/bindings, and GPU acceleration for operations such as MSM. Its performance
+  guidance says results vary by circuit and custom circuits need to be benchmarked. These
+  general claims do not establish support for DAMZ's exact floating-point location circuit,
+  proof parameters, verification key, or mobile app integration.
+- The user explicitly chose Mopro/GPU as an **additional** backend and directed that the
+  Zakura/CPU fallback be retained.
+
+**Resolution**:
+
+ADR-0030 adds Mopro/GPU as an optional, on-device prover behind a compatibility gate and
+feature flag; it does not replace Zakura/CPU or remove the unmodified `@ajna-inc/poe-proofs`
+CPU interim path. All backend outputs must prove the same circuit statement with identical
+public-input semantics, parameters, and verification key, and must pass the existing
+Customer/Admin verifier. No remote proving service or new trust setup is introduced.
+
+When enabled and validated, Mopro/GPU may be attempted first. If unsupported, over its
+resource/time budget, or it errors or yields an invalid proof, the app falls back to CPU at
+the requested precision (Zakura-optimized first, otherwise the unmodified baseline). A CPU
+proving/verification failure retains ADR-0027's lower-precision CPU retry. If CPU proving
+still fails or exceeds five seconds, coarse geohash is the final fallback and must be marked
+as non-ZK. Invalid GPU output is never accepted. Coordinates, witnesses, and proving keys stay on
+device; generated proofs follow the existing encrypted proof-bundle sharing flow, never a
+remote proving service. If the platform cannot meet the native buffer/privacy gate, the GPU
+backend remains disabled.
+
+**Alternatives considered**:
+
+- Replace or remove the Zakura/CPU path in favor of Mopro/GPU-only — rejected because the
+  user chose an additional backend and mobile GPU support is not universal or validated.
+- Assume Mopro works with the location circuit or infer DAMZ performance from general
+  Mopro benchmarks — rejected because circuit compatibility and actual performance have
+  not been demonstrated.
+- Send proofs or witnesses to a remote GPU/proving service — rejected because it would
+  disclose location data and violate the on-device proof boundary.
+- Change the circuit, verification key, proof contract, or trusted setup to fit an adapter
+  without a separate decision — rejected; those changes require review and an ADR.
+
+**Consequences and follow-up**:
+
+`docs/adr/0030-mopro-gpu-zk-backend.md` is the new authoritative decision. ADR-0019 remains
+authoritative for Zakura CPU optimization; ADR-0027 retains the lower-precision retry and
+coarse-geohash last resort. OQ-ROAD-001 is resolved: keep the existing CPU path if Zakura is
+delayed, and do not remove the CPU fallback for Mopro. OQ-ZK-PROVER-001 (exact circuit,
+parameter, and verifier compatibility) and OQ-ZK-PROVER-002 (device-matrix parity,
+performance, resource/thermal behavior, and buffer handling) are owned by Admin/Developer
+and must be resolved at the Phase 6 gate before enabling Mopro/GPU. If the gates fail,
+Mopro remains disabled; the CPU path continues.
+
+`SPEC.md`, `ROADMAP.md`, `DB_LAYOUT_AND_ARCH.md`, `DB_ARC_and_TEST_PLANNING.md`,
+`THREAT-MODEL.md`, `CONTEXT.md`, ADR-0013, ADR-0019, and ADR-0027 are aligned to this
+additive backend and fallback order. `DB_ARC_and_TEST_PLANNING.md` records pending
+acceptance cases; no tests, builds, installations, or runtime changes were made. The client
+schema remains 19 tables, Admin remains separate, and no user database or location data is
+added centrally. No unresolved question is left without an owner and target phase; no TODOs
+are introduced.
+
+**External sources consulted**:
+
+- Mopro mobile toolkit and GPU overview: https://zkmopro.org/docs/intro/
+- Mopro circuit-specific performance guidance: https://zkmopro.org/docs/performance/

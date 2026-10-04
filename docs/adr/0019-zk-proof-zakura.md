@@ -18,3 +18,11 @@ Fork `@ajna-inc/poe-proofs` and port Zakura Common's floating-point SNARK optimi
 - **Fallback**: If port delays v1, ship `@ajna-inc/poe-proofs` as-is with coarse geohash fallback (no ZK) for devices where proof generation >5s.
 - **Verification**: Keep `snarkjs` verification in Node.js (admin service, customer app) — only prover changes.
 - **Upstream**: Contribute optimizations back to `@ajna-inc/poe-proofs` if successful.
+
+### Later backend extension — ADR-0030
+
+ADR-0030 adds Mopro/GPU as an optional, additional on-device prover backend. It does not
+replace the Zakura-optimized CPU path, the unmodified `@ajna-inc/poe-proofs` CPU interim
+fallback, the shared proof-verification contract, or ADR-0027's coarse-geohash last resort.
+Mopro remains disabled until the exact DAMZ circuit, verification-key compatibility, and
+mobile performance/security gates pass.

@@ -74,10 +74,11 @@ It holds no personal information.
 _Avoid_: directory, roster
 
 **Proof bundle**:
-The encrypted evidence a Runner uploads after delivery: a hardware-signed photo, a
-zero-knowledge location proof, and metadata. Only a content identifier (CID) of it is
-shared; the proof key that decrypts it is random per bundle and travels separately over
-the encrypted order chat. Sharing that key is what lets the Admin review a dispute.
+The encrypted evidence a Runner uploads after delivery: a hardware-signed photo, metadata,
+and the location-check result actually produced—a ZK proof, or an explicitly non-ZK
+coarse-geohash fallback. Only a content identifier (CID) is shared; the random per-bundle
+key travels separately over the encrypted order chat. Sharing that key is what lets the
+Admin review a dispute; a coarse-geohash fallback is never represented as ZK proof.
 _Avoid_: receipt, evidence, delivery proof
 
 **Price list**:

@@ -644,8 +644,9 @@ Recorded so nobody assumes these exist:
 4. **Pay.** Mock provider returns a subaddress and amount; every transition lands in
    `payment_events`; `status` → `paid`.
 5. **Accept.** Runner adopts the order row, `status` → `accepted`.
-6. **Deliver.** Runner captures photo + ZK proof, uploads the encrypted bundle, writes
-   `proof_bundles` + `orders.proof_cid`, generates `proof_key`, sends it over the chat.
+6. **Deliver.** Runner captures the photo and location result: a verified ZK proof, or an
+   explicitly non-ZK coarse-geohash fallback. It uploads the encrypted evidence bundle,
+   writes `proof_bundles` + `orders.proof_cid`, generates `proof_key`, and sends it over chat.
 7. **Confirm.** Customer fetches the bundle, decrypts with `proof_key`, verifies, writes the
    verdict, `status` → `confirmed`.
 8. **Purge.** 30 days later the messages go; 90 days later the order goes — unless a dispute
@@ -684,6 +685,7 @@ the grilling and follow-up documentation sessions:
 | 0027 | Security flows | Seed restore, recovery phrase, Tor retry, auto re-key, geohash fallback |
 | 0028 | Secure memory and native wallet boundary | Independent Customer and Runner wallets; native-only 25-word Monero seed handling |
 | 0029 | Managed Android app-data remote wipe | Admin-only `wipe_pending`; DAMZ app data/keys only, best effort |
+| 0030 | Mopro GPU ZK backend | Optional on-device prover; Zakura/CPU fallback retained |
 | 0033 | Admin API endpoints | 7 endpoints, DISPUTES, SSE, DID-signed |
 | 0034 | Relay protocol spec | SHA256, TTL, seq nums, backoff, 3 relays, 64KB |
 | 0035 | Dispute resolution | Refund=new payment, runner strikes 3=ban, 14-day timeout |
@@ -724,7 +726,7 @@ the grilling and follow-up documentation sessions:
 5. **Order Detail** — Items, address, chat
 6. **Accept/Reject** — Cannot cancel after accept
 7. **Active Order** — Navigation (coarse geohash), in_transit
-8. **Delivery Capture** — Camera + ZK proof + photo attest (@realreel/photo-attest)
+8. **Delivery Capture** — Camera + optional Mopro/GPU ZK prover; Zakura/CPU fallback; photo attest (@realreel/photo-attest)
 9. **Proof Review** — Preview before upload
 10. **Upload & Send Key** — IPFS upload, CID + proof_key over chat
 11. **Order History** — Completed, disputed
@@ -758,7 +760,7 @@ the grilling and follow-up documentation sessions:
 - **Biometric failure (seed/spend keys)**: Native recovery phrase entry; no PIN fallback. Optional private-view-key PIN flow remains the narrow native-only exception in ADR-0028.
 - **Tor issues**: Exponential backoff retry + "Tor connecting..." + offline indicator (cached data)
 - **Signal session corruption**: Automatic re-keying (Signal Protocol handles)
-- **ZK proof failure**: Coarse geohash fallback (no ZK), retry with lower precision
+- **ZK proof backend — ADR-0030**: Optional compatible Mopro/GPU attempt; on unavailability/error/invalid proof, fall back to Zakura-optimized CPU (or unmodified `@ajna-inc/poe-proofs` CPU if the Zakura port is unavailable). If CPU proving or verification fails, retry at lower precision as defined by ADR-0027. If CPU proving still fails or exceeds five seconds, use coarse geohash only (no ZK). GPU output that fails the existing verifier is rejected and never treated as a successful proof.
 
 ### Managed-Android Remote App-Data Wipe — ADR-0029
 - Applies only to Customer/Runner installations verified as enrolled, managed Android devices; no iOS or unmanaged Android coverage.

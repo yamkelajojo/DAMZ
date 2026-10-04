@@ -35,7 +35,7 @@ DAMZ uses a **three-tier storage architecture**:
 |------|-----------|---------|------------|
 | **Tier 1: Local Encrypted DB** | WatermelonDBCipher (SQLCipher fork) | Structured data: orders, DIDs, wallet metadata, session state | AES-256 (SQLCipher) |
 | **Tier 2: Secure Key Store** | Platform Keychain/Keystore; `expo-secure-store` for general keys; native `SecureMemory` for Monero wallet secrets (ADR-0028) | Encryption keys, independent Customer/Runner wallet secrets | Hardware-backed at rest; wallet-secret plaintext remains native-only |
-| **Tier 3: Decentralized Blob Store** | IPFS (Helia or Meshkit S3 backend) | Encrypted proof bundles: delivery photos, ZK location proofs, signed attestations | AES-256-GCM (client-side, before upload) |
+| **Tier 3: Decentralized Blob Store** | IPFS (Helia or Meshkit S3 backend) | Encrypted delivery-evidence bundles: photos, ZK proofs or explicitly non-ZK coarse-geohash fallback, signed attestations | AES-256-GCM (client-side, before upload) |
 
 #### Tier 1: Local Encrypted Database — WatermelonDBCipher
 
@@ -174,7 +174,7 @@ available for non-wallet keys.
 
 #### Tier 3: Decentralized Blob Store (IPFS)
 
-Delivery proof bundles (encrypted photo + ZK location proof + hardware signature) are stored on IPFS. The encryption happens **on the device before upload** using AES-256-GCM. The IPFS node or S3-compatible backend only ever sees ciphertext.
+Delivery-evidence bundles (photo + hardware signature + the location result actually produced: a ZK proof or an explicitly non-ZK coarse-geohash fallback) are stored encrypted on IPFS. Encryption happens **on the device before upload** using AES-256-GCM. The IPFS node or S3-compatible backend only ever sees ciphertext.
 
 **Two implementation paths:**
 
@@ -673,6 +673,40 @@ as part of this documentation directive.
   Validate minimum supported Android versions and interrupted-wipe behavior before the
   Customer/Runner native-wipe and Admin integration gates (OQ-SEC-WIPE-002).
 
+### 2.6.4 Mobile ZK Backend Compatibility and Fallback Gate (ADR-0030)
+
+These are planned acceptance tests, not executed tests. Mopro/GPU remains disabled until the
+circuit and device gates pass. Zakura/CPU remains the supported fallback; if the Zakura port
+is unavailable, the existing `@ajna-inc/poe-proofs` CPU prover remains the interim path.
+
+- **Circuit and verifier parity — TC-ZK-BE-01**: run canonical location-proof vectors through
+  each supported prover; confirm the circuit statement, public-input encoding, parameters,
+  and verification key are identical. Verify both Mopro/GPU and CPU outputs with the
+  existing Customer and Admin verifiers. Reject any output that does not verify.
+- **Capability selection — TC-ZK-BE-02**: when Mopro/GPU is disabled, unsupported, or not
+  validated for a device/circuit combination, prove through CPU without changing the
+  statement or sending data to a remote prover.
+- **Failure recovery — TC-ZK-BE-03**: simulate Mopro initialization/proving errors,
+  unsupported GPU, memory/thermal pressure, timeout, and invalid proof. Confirm a fresh
+  Zakura/CPU proof is attempted at the requested precision; if CPU proving/verification
+  fails, retain the lower-precision CPU retry (ADR-0027). Coarse geohash is used only when
+  CPU proving still fails or exceeds five seconds, and the result is explicitly identified
+  as having no ZK proof.
+- **Privacy and buffer lifecycle — TC-ZK-BE-04**: inspect network capture, application
+  logs, persistent storage, and native/GPU buffer cleanup. Confirm coordinates, witnesses,
+  proving keys, and proofs are not sent to a remote accelerator or service, logged, or
+  persisted as plaintext; disable the GPU backend if its supported buffer lifecycle cannot
+  meet this gate.
+- **Device performance and stability — TC-ZK-BE-05**: benchmark both provers on the actual
+  DAMZ circuit across the minimum supported Android/iOS matrix, including mid-range Android
+  (Pixel 6a class). Record end-to-end proving time, peak memory, thermal throttling, and
+  failure rate; do not infer DAMZ performance from Mopro's general benchmarks. The existing
+  five-second CPU gate and geohash behavior remain in force.
+
+**Unresolved compatibility inputs**: OQ-ZK-PROVER-001/002 in ADR-0030 are owned by
+Admin/Developer and must be resolved at the Phase 6 gate. If circuit compatibility or privacy
+requirements cannot be demonstrated, Mopro/GPU remains disabled and the CPU path continues.
+
 ### 2.7 Requirements Traceability Matrix (Sample)
 
 | Req ID | Requirement | Test Cases | Status |
@@ -682,7 +716,8 @@ as part of this documentation directive.
 | REQ-PAY-01 | Generate unique Monero subaddress per order | TC-PAY-01 to TC-PAY-05 | Pending |
 | REQ-PAY-02 | Detect payment within 3 blocks | TC-PAY-06, TC-PAY-07 | Pending |
 | REQ-PROOF-01 | Photo must be hardware-signed | TC-PROOF-01 to TC-PROOF-04 | Pending |
-| REQ-PROOF-02 | Location proof must be ZK-verifiable | TC-PROOF-05 to TC-PROOF-08 | Pending |
+| REQ-PROOF-02 | Location proof must be ZK-verifiable by the existing verifier; coarse-geohash mode is explicitly non-ZK | TC-PROOF-05 to TC-PROOF-08; TC-ZK-BE-01 | Pending |
+| REQ-PROOF-03 | Optional Mopro/GPU and CPU backends preserve one proof contract and fallback safely to Zakura/CPU, lower-precision CPU, then coarse geohash (ADR-0030) | TC-ZK-BE-01 to TC-ZK-BE-05 | Pending |
 | REQ-DB-01 | All local data encrypted with SQLCipher | TC-DB-01 to TC-DB-05 | Pending |
 | REQ-DB-02 | Monero wallet secrets never stored in SQLCipher DB | TC-DB-06 | Pending |
 | REQ-SEC-MEM-01 | Customer and Runner wallet secrets and the view-key PIN never cross the JavaScript/JSI boundary | TC-SEC-MEM-01 to TC-SEC-MEM-04 | Pending |

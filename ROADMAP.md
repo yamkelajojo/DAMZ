@@ -180,28 +180,31 @@
 - `@realreel/photo-attest` integration (ADR-0020):
   - Camera capture → C2PA signing (Secure Enclave / StrongBox)
   - Device attestation token (App Attest / KeyStore Attestation)
-- `@ajna-inc/poe-proofs` + Zakura optimizations (ADR-0019):
-  - GPS + sensor input → ZK location proof
-  - Proof verification (customer app + admin CLI)
-- Fallback: coarse geohash if ZK fails (ADR-0027)
+- Location-proof backend abstraction:
+  - Optional Mopro/GPU prover when the exact DAMZ circuit/device combination passes the compatibility and parity gate (ADR-0030)
+  - Zakura-optimized CPU prover remains the fallback; unmodified `@ajna-inc/poe-proofs` CPU remains the interim path if the Zakura port is not ready (ADR-0019)
+  - Proof verification remains the existing customer-app + Admin CLI contract
+- Final fallback: coarse geohash only (no ZK) if the CPU path—including ADR-0027's lower-precision retry for proving/verification failure—still fails or CPU proving exceeds five seconds
 - Delivery Capture screen (8 of 13 runner)
 
 **Dependencies**: Phase 1, 3 (runner app + core)
 
 **Test Gate**:
 - [ ] Photo captured, C2PA manifest verified on another device
-- [ ] ZK proof generated <5s on mid-range Android (Pixel 6a class)
+- [ ] ZK proof generated <5s on mid-range Android (Pixel 6a class); benchmark Mopro/GPU and CPU paths on the actual DAMZ circuit rather than extrapolating package benchmarks (ADR-0030)
+- [ ] Mopro/GPU and Zakura/CPU proofs use the same circuit/public-input contract and verify with the existing customer app + Admin CLI verifier
+- [ ] Unsupported GPU, resource pressure, or GPU error falls back to Zakura CPU; if Zakura is unavailable use the unmodified `@ajna-inc/poe-proofs` CPU path
+- [ ] CPU proving/verification failure retains the lower-precision CPU retry; coarse geohash activates only if that retry fails or CPU proving exceeds five seconds; no invalid GPU proof is accepted (ADR-0027)
 - [ ] Proof verification passes (customer app + admin CLI)
-- [ ] Geohash fallback activates when ZK >5s or fails
 - [ ] StrongBox detection works (Pixel/Samsung)
 - [ ] Unit tests: PhotoAttestation, ZKProofManager
 - [ ] Device attestation token embedded and verifiable
 
 **Risks**:
-- Zakura port timeline (ADR-0019) — may need fallback for v1
-- `@ajna-inc/poe-proofs` React Native compatibility
+- Mopro adapter/GPU compatibility with DAMZ's exact circuit, existing proof verifier, supported iOS/Android targets, and React Native bindings (OQ-ZK-PROVER-001/002)
+- Zakura CPU port timeline (ADR-0019); the unmodified `@ajna-inc/poe-proofs` CPU path remains available if delayed
 - Camera + GPS permission handling
-- Battery/thermal throttling during proof generation
+- Battery, memory, and thermal throttling on both GPU and CPU proving paths
 
 ---
 
@@ -436,7 +439,7 @@
 
 ## Open Questions
 
-- **OQ-ROAD-001**: Phase 6 Zakura port — if delayed, ship `@ajna-inc/poe-proofs` as-is with geohash fallback?
+- **OQ-ROAD-001 (resolved by ADR-0019, ADR-0030, and refinement C19)**: Mopro/GPU is an additional optional prover backend; Zakura-optimized CPU remains the fallback, with unmodified `@ajna-inc/poe-proofs` CPU as the interim path if the Zakura port is delayed. Retain ADR-0027's lower-precision CPU retry; coarse geohash remains the final fallback if that retry fails or CPU proving exceeds five seconds.
 - **OQ-ROAD-002 (resolved by ADR-0009 and refinement C16)**: AcceptXMR remains the canonical Rust gateway; do not fall back to MoneroPay/Node.js. If AcceptXMR proves unusable, Admin/Developer must propose a Rust-compatible alternative through an ADR before Phase 9.
 - **OQ-ROAD-003**: Phase 11 — how many physical devices for concurrent testing? Budget for 4 (2 customer + 2 runner)?
 - **OQ-ROAD-004**: F-Droid submission timing — start metadata preparation in Phase 10?

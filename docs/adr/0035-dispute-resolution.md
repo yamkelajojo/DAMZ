@@ -30,7 +30,7 @@ Complete asymmetric dispute flow: Customer raises, Admin judges with Customer's 
 1. List open disputes
 2. View: order info, customer evidence, runner info
 3. Request proof key from customer (if not shared)
-4. Decrypt proof bundle → verify photo + ZK location proof
+4. Decrypt delivery-evidence bundle → verify photo and the location result actually present; treat coarse-geohash fallback as explicitly non-ZK (ADRs 0027, 0030)
 5. Rule: resolved (customer right) / dismissed (runner right)
 
 **Rules**:
