@@ -1,8 +1,16 @@
-# Build & CI/CD Pipeline
+# ADR-0034: Build & CI/CD Pipeline
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+Need reproducible builds for F-Droid, Hermes bytecode, EAS for builds, GitHub Actions for CI.
+
+## Decision
 
 Reproducible builds for F-Droid. Hermes bytecode. EAS for builds. GitHub Actions for CI.
+
+## Consequences
 
 **Monorepo**: Turborepo + Bun workspaces + Cargo workspaces
 - `apps/*` (Expo), `packages/*` (TS), `services/*` (Rust)

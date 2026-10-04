@@ -1,12 +1,17 @@
-# Mock payment provider: Configurable scenarios for all payment states
+# ADR-0023: Mock Payment Provider: Configurable Scenarios for All Payment States
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+v1 uses mock payment (ADR-0009 AcceptXMR is real gateway but not wired in v1 app). Grilling chose configurable mock to test all payment UI states.
+
+## Decision
 
 `MockPaymentProvider` implements `PaymentProvider` interface with scenario prop: `'success' | 'timeout' | 'partial' | 'double'`. Exercises all `payment_events` kinds.
 
-**Context**: v1 uses mock payment (ADR-0009 AcceptXMR is real gateway but not wired in v1 app). Grilling chose configurable mock to test all payment UI states.
+## Consequences
 
-**Consequences**:
 - **Interface**:
   ```typescript
   interface PaymentProvider {

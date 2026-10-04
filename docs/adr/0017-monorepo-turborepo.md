@@ -1,12 +1,17 @@
-# Monorepo: Turborepo + Expo + Cargo workspaces
+# ADR-0017: Monorepo: Turborepo + Expo + Cargo Workspaces
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+SPEC shows `apps/` + `packages/` + `services/` structure. Grilling confirmed Turborepo for its cross-language task graph, remote caching, and industry adoption.
+
+## Decision
 
 Use Turborepo for task orchestration across TypeScript (Expo apps, shared packages) and Rust (services).
 
-**Context**: SPEC shows `apps/` + `packages/` + `services/` structure. Grilling confirmed Turborepo for its cross-language task graph, remote caching, and industry adoption.
+## Consequences
 
-**Consequences**:
 - **Root `package.json`**: Turborepo config, workspaces for `apps/*`, `packages/*`.
 - **Root `Cargo.toml`**: `[workspace]` for `services/admin`, `services/relay`, `services/gateway`, `services/pinner`.
 - **`turbo.json`**:

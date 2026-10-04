@@ -1,7 +1,12 @@
-# DAMZ
+# DAMZ — Context & Domain Glossary
 
-DAMZ is an anonymous, local-first delivery marketplace for a small fixed catalog of goods, running over Tor with peer-to-peer order chats and no accounts.
+**Version**: 1.0
+**Status**: Approved
+**Last Updated**: 2026-10-04
+**Owner**: Admin/Developer
 
+DAMZ is an anonymous, local-first delivery marketplace for a small fixed catalog of
+goods, running over Tor with peer-to-peer order chats and no accounts.
 ## Language
 
 **Persona**:
@@ -25,7 +30,7 @@ The one bounded, Tor-hidden service the Admin operates. It is authoritative for 
 _Avoid_: backoffice, dashboard backend, central server
 
 **Catalog**:
-The fixed set of seven goods that may be ordered. Each Runner marks items available or unavailable and sets their own price; there are no inventory counts.
+The fixed set of eight goods that may be ordered. Each Runner marks items available or unavailable and sets their own price; there are no inventory counts.
 _Avoid_: inventory, products, stock, menu
 
 **Order**:

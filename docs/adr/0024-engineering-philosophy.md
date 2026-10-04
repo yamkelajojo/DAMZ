@@ -1,6 +1,12 @@
-# Engineering philosophy: Silicon-grade precision, hacker-grade paranoia, delightful UI
+# ADR-0024: Engineering Philosophy: Silicon-Grade Precision, Hacker-Grade Paranoia, Delightful UI
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+No timeline pressure. Build v1 with uncompromising quality across three dimensions.
+
+## Decision
 
 No timeline pressure. Build v1 with:
 - **Silicon-level engineering**: Zero tolerance for undefined behavior, memory leaks, race conditions. Every crypto primitive tested against vectors. Every state transition exhaustively verified. SQLCipher keys never in memory longer than necessary. Tor circuits monitored. Signal sessions forward-secret.
@@ -8,7 +14,8 @@ No timeline pressure. Build v1 with:
 - **Sleek innovation**: First anonymous medicine delivery over Tor + Monero + ZK proofs + hardware attestation. Push the envelope on mobile ZK (Zakura port). First `react-native-libsignal-client` + `react-native-nitro-tor` + `acceptxmr` integration.
 - **Delightful UI**: "Nicest friendliest easiest interface ever" — not a privacy-tool aesthetic. Warm, human, approachable. Hides all complexity. Runner and Customer apps feel like premium consumer apps, not opsec tools.
 
-**Consequences**:
+## Consequences
+
 - Code quality gates: `narvy-cli` SAST on every commit. `cargo clippy --deny warnings`. TypeScript `strict: true`. Zero `any`. Zero `@ts-ignore`. Zero `unwrap()`/`expect()` in production paths.
 - UI library: Must support custom design system, smooth 60fps animations, gesture-driven interactions, dark/light theming, accessibility. Not a generic component library.
 - Design process: Design in code (Storybook/Playground), not Figma. Iterate at 60fps on device.

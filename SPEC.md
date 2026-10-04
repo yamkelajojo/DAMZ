@@ -1,4 +1,9 @@
-# DAMZ — Technical Specification v1.0
+# DAMZ — Technical Specification
+
+**Version**: 1.0
+**Status**: Approved
+**Last Updated**: 2026-10-04
+**Owner**: Admin/Developer
 
 **Project**: DAMZ — Anonymous Medicine & Herb Delivery Platform
 **Target Market**: South Africa (ZAR ↔ XMR)
@@ -57,6 +62,8 @@ damz/
 - The adversary cannot break AES-256-GCM, X25519, Ed25519, or zk-SNARK soundness.
 - The adversary may operate malicious relay nodes.
 - The adversary does not have physical access to the device during operation.
+- The adversary does not have a rooted/jailbroken device (memory extraction out of scope).
+- There is no central store of order content, chat content, proof content, or user identity. The Admin service is authoritative only for moderation state and holds zero rows of order, message, or proof data.
 
 **Out of scope**:
 - Compromised operating system (rooted/jailbroken device).
@@ -648,7 +655,7 @@ Open-sourced under MIT/Apache 2.0 dual license.
 
 ### 9.1 Order Placement (Customer)
 
-1. Customer opens app, selects items from the seven available (Cabbage, Spinach, Cinnamon, Cauliflower, Rock Salt, Flour, Bicarbonate of Soda).
+1. Customer opens app, selects items from the eight available (Cabbage, Spinach, Cinnamon, Cauliflower, Rock Salt, Flour, Bicarbonate of Soda, Grape Soda (Small Bottle)).
 2. Customer's app queries nearby runners via the relay (Tor onion service discovery). Runners advertise availability by publishing their onion service to a community-maintained IPNS record.
 3. Customer selects a runner and places an order. Order details (items, quantities, delivery address geohash) are encrypted with the runner's Signal Protocol public key.
 4. Customer's app generates a Monero subaddress request via the MoneroPay gateway (`.onion`). The gateway returns a subaddress + amount in XMR.

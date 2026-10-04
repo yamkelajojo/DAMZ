@@ -1,6 +1,10 @@
 # DAMZ — Database Layout & Architecture (v2)
 
-**Status**: rewritten 2026-10-04 by the `grill-with-docs` refinement session.
+**Version**: 2.0
+**Status**: Approved
+**Last Updated**: 2026-10-04
+**Owner**: Admin/Developer
+
 **Supersedes**: v1 of this document, and Part I of `DB_ARC_and_TEST_PLANNING.md`.
 Part II (Testing Strategy) of that document is unaffected.
 **Authority**: every decision here is recorded with its rationale in `REFINEMENT_SESSION.md`;
@@ -92,11 +96,11 @@ CREATE TABLE contacts (
 ```
 
 ```sql
--- The fixed seven-item catalog. Seeded at install, never written by anyone.
+-- The fixed eight-item catalog. Seeded at install, never written by anyone.
 -- ✍️ Owner: the app bundle. 👁️ Both apps.
 CREATE TABLE catalog_items (
-  id           TEXT PRIMARY KEY,             -- 'cabbage', 'spinach', 'cinnamon', ...
-  display_name TEXT NOT NULL,                -- 'Cabbage', ...
+  id           TEXT PRIMARY KEY,             -- 'cabbage', 'spinach', 'cinnamon', 'cauliflower', 'rock_salt', 'flour', 'bicarbonate_of_soda', 'grape_soda'
+  display_name TEXT NOT NULL,                -- 'Cabbage', 'Spinach', 'Cinnamon', 'Cauliflower', 'Rock Salt', 'Flour', 'Bicarbonate of Soda', 'Grape Soda (Small Bottle)'
   sort_order   INTEGER NOT NULL
 );
 ```
@@ -583,7 +587,7 @@ Recorded so nobody assumes these exist:
   Practical consequence: a banned Customer can rotate to a new DID, exactly as a Runner can.
   Bans are a deterrent against casual abuse, not an identity system.
 - **Multi-runner or multi-item-per-runner inventory, cart abandonment, refunds.** Out of
-  scope for the seven-item basket; a refund is a dispute outcome today.
+  scope for the eight-item basket; a refund is a dispute outcome today.
 - **Exact delivery coordinates** — memory only, never a column (§4).
 
 ---
@@ -666,7 +670,7 @@ The following ADRs were created during the grilling session to document decision
 ### Runner App (13 Screens + Converter Tab)
 1. **Onboarding** — DID + onion, claim pre-created registry (ADR-0015)
 2. **Dashboard** — Active orders, earnings, availability toggle
-3. **Price List Editor** — 7 items, prices, availability, delivery fee, sign & publish
+3. **Price List Editor** — 8 items, prices, availability, delivery fee, sign & publish
 4. **Order Requests** — Incoming with countdown
 5. **Order Detail** — Items, address, chat
 6. **Accept/Reject** — Cannot cancel after accept

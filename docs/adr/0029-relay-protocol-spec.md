@@ -1,8 +1,16 @@
-# Relay Protocol Specification
+# ADR-0029: Relay Protocol Specification
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+The discardable relay needs a precise protocol definition for interoperability and testing.
+
+## Decision
 
 Full message format for the discardable relay.
+
+## Consequences
 
 **Protocol**:
 

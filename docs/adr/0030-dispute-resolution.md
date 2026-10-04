@@ -1,10 +1,16 @@
-# Dispute Resolution Flow
+# ADR-0030: Dispute Resolution Flow
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+Need a complete asymmetric dispute flow where Customer raises, Admin judges with Customer's evidence only.
+
+## Decision
 
 Complete asymmetric dispute flow: Customer raises, Admin judges with Customer's evidence only.
 
-**Flow**:
+## Consequences
 
 **Customer Side**:
 1. Order delivered but issue (non_delivery, wrong_item, other)

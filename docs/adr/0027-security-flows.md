@@ -1,12 +1,17 @@
-# Security Flows: Migration & Fallbacks
+# ADR-0027: Security Flows: Migration & Fallbacks
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+Multiple components can fail in production. Need consistent fallback strategy.
+
+## Decision
 
 Standardized fallback behavior for all critical security components.
 
-**Context**: Multiple components can fail in production. Need consistent fallback strategy.
+## Consequences
 
-**Consequences**:
 | Component | Primary | Fallback |
 |-----------|---------|----------|
 | Identity migration | Seed phrase restore on new device | — |

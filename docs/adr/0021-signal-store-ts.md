@@ -1,12 +1,17 @@
-# Signal Protocol store: TypeScript implementation over expo-sqlite + expo-secure-store
+# ADR-0021: Signal Protocol Store: TypeScript Implementation Over `expo-sqlite` + `expo-secure-store`
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+`react-native-libsignal-client` requires a custom store. Grilling chose pure TS implementation over native ports for auditability and single codebase.
+
+## Decision
 
 Implement `SignalProtocolStore` interface in TypeScript using `expo-sqlite` (SQLCipher) for prekeys/sessions and `expo-secure-store` for long-term identity keys.
 
-**Context**: `react-native-libsignal-client` requires a custom store. Grilling chose pure TS implementation over native ports for auditability and single codebase.
+## Consequences
 
-**Consequences**:
 - **Tables** (in same SQLCipher DB as app data, or separate):
   - `signal_prekeys` (signed + unsigned, one-time)
   - `signal_sessions` (Double Ratchet state per recipient)

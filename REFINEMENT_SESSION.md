@@ -1,11 +1,12 @@
 # DAMZ — Refinement Session (grill-with-docs)
 
+**Version**: 1.0
+**Status**: Complete
 **Started**: 2026-10-04
+**Completed**: 2026-10-04
 **Method**: `grill-with-docs` (grilling + domain-modeling). Decisions are worked as a
 design tree in rounds.
-**Status**: all four rounds answered and the layout confirmed by the user (2026-10-04). The agreed layout is written up in
-`DB_LAYOUT_AND_ARCH.md` v2. Each round asks the whole **frontier** — the questions whose
-prerequisites are already settled. This file is updated after every answer.
+**Owner**: Admin/Developer
 
 **Source documents under review**
 
@@ -38,8 +39,8 @@ prerequisites are already settled. This file is updated after every answer.
 
 ### Q1 — What is DAMZ selling in v1? → **A. Fixed 7-item grocery basket**
 
-Confirmed: the seven items (Cabbage, Spinach, Cinnamon, Cauliflower, Rock Salt, Flour,
-Bicarbonate of Soda) are the real v1 catalog. Medicine & herbs are a later concern.
+Confirmed: the eight items (Cabbage, Spinach, Cinnamon, Cauliflower, Rock Salt, Flour,
+Bicarbonate of Soda, Grape Soda (Small Bottle)) are the real v1 catalog. Medicine & herbs are a later concern.
 Resolves **C8**.
 
 ### Q2 — Central authority? → **B. One minimal Tor-hidden admin service**

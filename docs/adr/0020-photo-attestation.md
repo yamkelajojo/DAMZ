@@ -1,12 +1,17 @@
-# Photo attestation: @realreel/photo-attest (C2PA + device attestation)
+# ADR-0020: Photo Attestation: `@realreel/photo-attest` (C2PA + Device Attestation)
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+SPEC recommended this. Grilling confirmed over lighter alternatives (`react-native-biometric-signature`, Vouch Protocol) because C2PA envelope + device attestation token provides the strongest evidence for dispute resolution.
+
+## Decision
 
 Use `@realreel/photo-attest` for hardware-bound C2PA capture signing with Secure Enclave (iOS) / StrongBox (Android) and device attestation (App Attest / KeyStore Attestation).
 
-**Context**: SPEC recommended this. Grilling confirmed over lighter alternatives (`react-native-biometric-signature`, Vouch Protocol) because C2PA envelope + device attestation token provides the strongest evidence for dispute resolution.
+## Consequences
 
-**Consequences**:
 - **Install**: `bun add @realreel/photo-attest` + JitPack Maven for `c2pa-android` transitive.
 - **iOS**: Deployment target 16.0. Generates ECDSA P-256 in Secure Enclave. App Attest attestation per capture.
 - **Android**: minSdk 28. StrongBox on Pixel/Samsung Knox, fallback to TEE. KeyStore Attestation per capture.

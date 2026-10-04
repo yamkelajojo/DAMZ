@@ -1,10 +1,16 @@
-# Admin Service API Endpoints
+# ADR-0028: Admin Service API Endpoints
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+Mobile apps need to sync mirrors (strikes, settings, directory, disputes) and submit disputes.
+
+## Decision
 
 Full REST + SSE API for mobile app sync and dispute management.
 
-**Context**: Mobile apps need to sync mirrors (strikes, settings, directory, disputes) and submit disputes.
+## Consequences
 
 **Endpoints**:
 

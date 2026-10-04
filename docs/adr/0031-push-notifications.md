@@ -1,10 +1,17 @@
-# Push Notifications: UnifiedPush
+# ADR-0031: Push Notifications: UnifiedPush
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+Need push notifications without Google/Apple dependency.
+
+## Decision
 
 Self-hosted UnifiedPush distributor over Tor. No Google/Apple dependency.
 
-**Architecture**:
+## Consequences
+
 - **Distributor**: Self-hosted on admin VPS (UnifiedPush spec)
 - **Apps register** via Tor on first launch (persistent connection)
 - **Push payload** = encrypted Signal message (E2EE)

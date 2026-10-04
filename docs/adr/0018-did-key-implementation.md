@@ -1,12 +1,17 @@
-# `did:key` implementation: `@did-tools/key`
+# ADR-0018: `did:key` Implementation: `@did-tools/key`
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+ADR-0002 chose `did:key` over ledger-based DIDs. SPEC originally used `@credebl/ssi-mobile` (Indy/Aries). Grilling selected the lightweight TypeScript library.
+
+## Decision
 
 Use `@did-tools/key` (TypeScript) for `did:key` generation, resolution, and verification. No `didkit`, no manual multicodec encoding.
 
-**Context**: ADR-0002 chose `did:key` over ledger-based DIDs. SPEC originally used `@credebl/ssi-mobile` (Indy/Aries). Grilling selected the lightweight TypeScript library.
+## Consequences
 
-**Consequences**:
 - **Install**: `bun add @did-tools/key`
 - **API**:
   ```typescript

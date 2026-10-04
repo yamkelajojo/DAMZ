@@ -1,8 +1,16 @@
-# App Lifecycle & Permissions
+# ADR-0033: App Lifecycle & Permissions
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+Need graceful fallbacks for all permission denied scenarios.
+
+## Decision
 
 Graceful fallbacks for all permission denied scenarios.
+
+## Consequences
 
 **App States**:
 - Cold start: Init Tor → Connect relay → Sync mirrors → Load UI (<3s target)
@@ -12,6 +20,7 @@ Graceful fallbacks for all permission denied scenarios.
 - Termination: Tor stops (unless orders active) → Save state
 
 **Permissions** (requested at appropriate time):
+
 | Permission | When Requested | Denied Fallback |
 |------------|----------------|-----------------|
 | Camera | Delivery capture (Runner) / QR scan (Customer) | Runner: cannot fulfill orders. Customer: manual address entry |

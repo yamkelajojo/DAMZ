@@ -1,12 +1,17 @@
-# Runner onboarding: Invite-only pre-creation via admin CLI
+# ADR-0015: Runner Onboarding: Invite-Only Pre-Creation via Admin CLI
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+SPEC implied a dashboard approval flow. Grilling favored the simplest model: no dashboard UI, no application API, no IPNS. Admin controls the registry directly.
+
+## Decision
 
 Admin pre-creates `runner_registry` rows (DID + onion + `approved_at=null`) via CLI/script. Runner claims on first app launch.
 
-**Context**: SPEC implied a dashboard approval flow. Grilling favored the simplest model: no dashboard UI, no application API, no IPNS. Admin controls the registry directly.
+## Consequences
 
-**Consequences**:
 - **Admin CLI**: `cargo run --bin admin-cli -- runner add --did did:key:z6Mk... --onion abc123.onion`
 - **Runner app flow**: On first launch, generates `did:key` + onion (via `mkp224o` or Tor daemon). Queries admin service `/runners/me` (authenticated by DID signature). If registry entry exists with matching DID+onion and `approved_at=null`, prompts "Claim this runner profile?" → sets local `identity.is_available=1`.
 - **No dashboard needed** for v1. Admin manages runners via CLI + SQLite direct access.

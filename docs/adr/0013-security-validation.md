@@ -1,12 +1,17 @@
-# Security validation: Internal red-team + narvy SAST for v1
+# ADR-0013: Security Validation: Internal Red-Team + narvy SAST for v1
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+SPEC testing strategy named OWASP MASVS and narvy. Grilling confirmed budget/time constraints favor internal validation for v1, with external review deferred to post-launch.
+
+## Decision
 
 v1 security validation relies on internal red-team exercise + `narvy-cli` SAST in CI. No third-party pentest or bug bounty at launch.
 
-**Context**: SPEC testing strategy named OWASP MASVS and narvy. Grilling confirmed budget/time constraints favor internal validation for v1, with external review deferred to post-launch.
+## Consequences
 
-**Consequences**:
 - **narvy-cli**: Runs on every CI build (Stage 4). Fails pipeline on hardcoded secrets, weak crypto, insecure config, SSRF, injection.
 - **Internal red-team (2 weeks pre-launch)**:
   1. Tor traffic analysis: confirm no clearnet leaks, correlation resistance.

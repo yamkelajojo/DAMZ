@@ -1,12 +1,17 @@
-# Admin service API: REST + SSE over Tor
+# ADR-0016: Admin Service API: REST + SSE Over Tor
 
-**Status**: accepted
+**Status**: Accepted
+
+## Context
+
+Mobile apps maintain read-only mirrors (`strikes`, `settings`, `directory`, `disputes`) with `sync_state` cursors. Grilling chose REST + SSE for simplicity and debuggability over custom binary protocols.
+
+## Decision
 
 Admin service exposes REST endpoints for sync + SSE stream for push updates. All over Tor hidden service.
 
-**Context**: Mobile apps maintain read-only mirrors (`strikes`, `settings`, `directory`, `disputes`) with `sync_state` cursors. Grilling chose REST + SSE for simplicity and debuggability over custom binary protocols.
+## Consequences
 
-**Consequences**:
 - **Endpoints**:
   - `GET /sync/strikes?cursor=<opaque>` → `{items: Strike[], cursor}`
   - `GET /sync/settings?cursor=<opaque>` → `{items: Setting[], cursor}`

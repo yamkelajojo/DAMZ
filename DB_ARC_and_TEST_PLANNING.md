@@ -2,8 +2,10 @@
 
 **Document**: DB-ARCH-001 & TEST-001
 **Project**: DAMZ
-**Version**: 1.0
-**Status**: Draft for Review
+**Version**: 2.0
+**Status**: Approved
+**Last Updated**: 2026-10-04
+**Owner**: Admin/Developer
 
 > ⚠️ **Superseded (2026-10-04)**: **Part I (Database Architecture) below is superseded** by
 > `DB_LAYOUT_AND_ARCH.md` v2, which came out of the `grill-with-docs` refinement session
@@ -19,7 +21,7 @@ The database architecture for DAMZ must satisfy four non-negotiable constraints 
 
 1. **Zero Plaintext at Rest** — Every byte of user data (DIDs, order records, chat history, wallet seeds, proof bundles) must be encrypted on device before it touches any storage layer.
 
-2. **No Central Database Server** — There is no PostgreSQL, MySQL, or MongoDB instance that holds user data. The "database" is a combination of encrypted local storage and content-addressed decentralized storage (IPFS).
+2. **No Central Store of User Data** — There is no central store of order content, chat content, proof content, or user identity. The Admin service is authoritative only for moderation state and holds zero rows of order, message, or proof data. The "database" is a combination of encrypted local storage and content-addressed decentralized storage (IPFS).
 
 3. **Offline-First** — Runners operate in areas with intermittent connectivity. Every operation must succeed locally and sync when connectivity is restored.
 

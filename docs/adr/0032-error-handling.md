@@ -1,10 +1,19 @@
-# Centralized Error Handling
+# ADR-0032: Centralized Error Handling
 
-**Status**: accepted
+**Status**: Accepted
 
-ErrorBoundary + error codes → user messages. Consistent UX, easier translation, single source of truth.
+## Context
+
+Need consistent error UX, easier translation, single source of truth for error messages.
+
+## Decision
+
+ErrorBoundary + error codes → user messages.
+
+## Consequences
 
 **Error Codes** (partial):
+
 | Code | User Message |
 |------|--------------|
 | TOR_CONNECTION_FAILED | "Connecting to Tor..." with retry button |
