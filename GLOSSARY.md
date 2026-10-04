@@ -23,6 +23,12 @@ The single authority that approves and bans runners, adjudicates disputes, and i
 strikes. In this project the Admin and the developer are the same person.
 _Avoid_: operator, moderator, owner
 
+**Admin service**:
+The one bounded, Tor-hidden service the Admin operates. It is authoritative for
+moderation state — runner registry, bans, strikes, disputes, platform settings — and
+holds no order, chat, or proof content.
+_Avoid_: backoffice, dashboard backend, central server
+
 **Catalog**:
 The fixed set of seven goods that may be ordered. Each Runner marks items available or
 unavailable and sets their own price; there are no inventory counts.
@@ -62,8 +68,14 @@ _Avoid_: directory, roster
 **Proof bundle**:
 The encrypted evidence a Runner uploads after delivery: a hardware-signed photo, a
 zero-knowledge location proof, and metadata. Only a content identifier (CID) of it is
-shared; the key to decrypt it is sent separately over the encrypted chat.
+shared; the proof key that decrypts it is random per bundle and travels separately over
+the encrypted order chat. Sharing that key is what lets the Admin review a dispute.
 _Avoid_: receipt, evidence, delivery proof
+
+**Price list**:
+The set of item prices and availability a Runner publishes under their DID. The Customer
+caches it, and an Order freezes the prices it was placed against so its total never moves.
+_Avoid_: menu, catalogue, rate card
 
 **Payment provider**:
 The swappable component that turns an order into a payable request and reports its

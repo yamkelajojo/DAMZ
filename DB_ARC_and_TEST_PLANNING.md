@@ -5,6 +5,11 @@
 **Version**: 1.0
 **Status**: Draft for Review
 
+> ⚠️ **Superseded (2026-10-04)**: **Part I (Database Architecture) below is superseded** by
+> `DB_LAYOUT_AND_ARCH.md` v2, which came out of the `grill-with-docs` refinement session
+> (`REFINEMENT_SESSION.md`). Part I is kept for history only. **Part II (Testing Strategy)
+> is unaffected and still current.**
+
 
 ## Part I: Database Architecture
 
