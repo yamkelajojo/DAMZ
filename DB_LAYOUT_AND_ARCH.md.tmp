@@ -1,4 +1,4 @@
-# DAMZ — Database Layout & Architecture (v2)
+﻿# DAMZ â€” Database Layout & Architecture (v2)
 
 **Status**: rewritten 2026-10-04 by the `grill-with-docs` refinement session.
 **Supersedes**: v1 of this document, and Part I of `DB_ARC_and_TEST_PLANNING.md`.
@@ -21,9 +21,9 @@ the two hardest ones are ADR-0003 and ADR-0004.
 | 7 | Catalog = 7 rows *with prices*, owned by the runner | `catalog_items` (fixed 7, read-only) + `price_lists` / `runner_prices` | Q14 |
 | 8 | Messages store the Signal envelope; 90-day retention | Messages store the **decrypted body**; envelope only until sent; **30 days** | Q15, Q9 |
 | 9 | Purge ran `unsafeResetDatabase()`, commented "VACUUM" | Purge is a real `DELETE` + `VACUUM`; that call would have **wiped the database** | Q9 |
-| 10 | Delivery address columns on both orders tables | **No address column** — the address exists only in the order chat | Q6, Q20 |
+| 10 | Delivery address columns on both orders tables | **No address column** â€” the address exists only in the order chat | Q6, Q20 |
 | 11 | `wallet_metadata` on the Customer app | Wallet belongs to the **Runner**, who is the payee | Q22 |
-| 12 | `runner_registry.total_orders_completed` | **Dropped** — counting orders requires holding order data (ADR-0001) | Q7 |
+| 12 | `runner_registry.total_orders_completed` | **Dropped** â€” counting orders requires holding order data (ADR-0001) | Q7 |
 
 ---
 
@@ -31,21 +31,21 @@ the two hardest ones are ADR-0003 and ADR-0004.
 
 There are two apps and one service:
 
-- **Customer app** (`apps/customer`) — places orders, pays, confirms delivery, converts ZAR→XMR (XmrBazaar/Haveno/UnstoppableSwap).
-- **Runner app** (`apps/runner`) — publishes a price list, accepts and fulfils orders, converts XMR→ZAR (Haveno).
-- **Admin service** (`services/admin`, Tor-hidden) — the only server. Registry, bans,
+- **Customer app** (`apps/customer`) â€” places orders, pays, confirms delivery, converts ZA’XMR (XmrBazaar/Haveno/UnstoppableSwap).
+- **Runner app** (`apps/runner`) â€” publishes a price list, accepts and fulfils orders, converts XM’ZAR (Haveno).
+- **Admin service** (`services/admin`, Tor-hidden) â€” the only server. Registry, bans,
   strikes, disputes, settings. It never holds order, chat, or proof content (ADR-0001).
 
 `packages/db` defines **every table once**. Each app installs the set it needs, and each
 device writes only the columns it owns. The rest are NULL. Every table below is annotated
 with who writes it:
 
-> **✍️ Owner** — the device allowed to write a column or table.
-> **👁️ Mirror** — read-only on the device; the admin service is the source of truth.
+> **âœï¸ Owner** â€” the device allowed to write a column or table.
+> **ðŸ‘ï¸ Mirror** â€” read-only on the device; the admin service is the source of truth.
 
 **Constraints that shaped the DDL**
 
-- WatermelonDB requires a single string `id` primary key per table — no composite keys.
+- WatermelonDB requires a single string `id` primary key per table â€” no composite keys.
   Where a natural composite key exists, it is expressed as a `UNIQUE` constraint and the
   `id` is the two parts joined.
 - WatermelonDB does not enforce foreign keys; the `REFERENCES` clauses document intent and
@@ -58,7 +58,7 @@ with who writes it:
 
 ```sql
 -- Exactly one row per device: this device's own persona.
--- ✍️ Owner: the device itself (both apps).
+-- âœï¸ Owner: the device itself (both apps).
 CREATE TABLE identity (
   id                TEXT PRIMARY KEY,        -- the DID; one row per install
   did               TEXT NOT NULL,           -- did:key:z6Mk...  (ADR-0002)
@@ -72,11 +72,11 @@ CREATE TABLE identity (
 );
 ```
 
-Private keys (DID, Signal identity, wallet seed) never enter this database — they live in
-`expo-secure-store` (see §7).
+Private keys (DID, Signal identity, wallet seed) never enter this database â€” they live in
+`expo-secure-store` (see Â§7).
 
 ```sql
--- People this device has dealt with. ✍️ Owner: the device.
+-- People this device has dealt with. âœï¸ Owner: the device.
 -- Keyed by DID, not by Signal address: the DID is the durable identity.
 CREATE TABLE contacts (
   id                  TEXT PRIMARY KEY,      -- the DID
@@ -93,7 +93,7 @@ CREATE TABLE contacts (
 
 ```sql
 -- The fixed seven-item catalog. Seeded at install, never written by anyone.
--- ✍️ Owner: the app bundle. 👁️ Both apps.
+-- âœï¸ Owner: the app bundle. ðŸ‘ï¸ Both apps.
 CREATE TABLE catalog_items (
   id           TEXT PRIMARY KEY,             -- 'cabbage', 'spinach', 'cinnamon', ...
   display_name TEXT NOT NULL,                -- 'Cabbage', ...
@@ -104,11 +104,11 @@ CREATE TABLE catalog_items (
 ### The published price list
 
 A Runner publishes a DID-signed price list; a Customer caches other Runners' lists. Same
-tables, different writers — which is what makes ordering possible offline, from cache.
+tables, different writers â€” which is what makes ordering possible offline, from cache.
 
 ```sql
 -- One row per published version of a Runner's list.
--- ✍️ Runner writes its own; Customer writes cached copies (read-only to the UI).
+-- âœï¸ Runner writes its own; Customer writes cached copies (read-only to the UI).
 CREATE TABLE price_lists (
   id               TEXT PRIMARY KEY,         -- '<runner_did>:<published_at>'
   runner_did       TEXT NOT NULL,
@@ -119,7 +119,7 @@ CREATE TABLE price_lists (
   is_current       INTEGER NOT NULL DEFAULT 1
 );
 
--- ✍️ Same rule as its parent.
+-- âœï¸ Same rule as its parent.
 CREATE TABLE runner_prices (
   id            TEXT PRIMARY KEY,            -- '<price_list_id>:<item_id>'
   price_list_id TEXT NOT NULL REFERENCES price_lists(id) ON DELETE CASCADE,
@@ -131,18 +131,18 @@ CREATE TABLE runner_prices (
 ```
 
 The signature is what stops a relay or an impostor substituting its own price list. An
-order never reads live prices — it freezes them (§3, `order_items`).
+order never reads live prices â€” it freezes them (Â§3, `order_items`).
 
 ---
 
 ## 2.5. Swap / Converter Tables (ADR-0014)
 
 The converter feature is integrated into both Customer and Runner apps.
-It does not hold funds — it facilitates atomic swaps and P2P exchange discovery.
+It does not hold funds â€” it facilitates atomic swaps and P2P exchange discovery.
 
 ```sql
--- Swap orders (UnstoppableSwap BTC↔XMR atomic swaps)
--- ✍️ Both apps write their own swaps.
+-- Swap orders (UnstoppableSwap BT”XMR atomic swaps)
+-- âœï¸ Both apps write their own swaps.
 CREATE TABLE swaps (
   id                TEXT PRIMARY KEY,        -- UUIDv4
   persona           TEXT NOT NULL,           -- 'customer' | 'runner'
@@ -174,7 +174,7 @@ CREATE TABLE swaps (
 
 ```sql
 -- P2P Exchange Offers (cached from XmrBazaar/Haveno)
--- ✍️ Both apps cache; read-only to UI.
+-- âœï¸ Both apps cache; read-only to UI.
 CREATE TABLE exchange_offers (
   id              TEXT PRIMARY KEY,          -- source-specific ID
   source          TEXT NOT NULL,             -- 'xmrbazaar' | 'haveno'
@@ -192,7 +192,7 @@ CREATE TABLE exchange_offers (
 
 ```sql
 -- Swap Events (audit trail for debugging)
--- ✍️ Both apps write their own events.
+-- âœï¸ Both apps write their own events.
 CREATE TABLE swap_events (
   id           TEXT PRIMARY KEY,
   swap_id      TEXT NOT NULL REFERENCES swaps(id) ON DELETE CASCADE,
@@ -208,24 +208,24 @@ CREATE TABLE swap_events (
 ## 3. Orders
 
 One wide table. The Customer owns the money columns, the Runner owns the delivery columns,
-and the state machine in §5 says who may move `status` along which edge.
+and the state machine in Â§5 says who may move `status` along which edge.
 
 ```sql
--- ✍️ Both apps, per column. One row per order per device.
+-- âœï¸ Both apps, per column. One row per order per device.
 CREATE TABLE orders (
   id                TEXT PRIMARY KEY,        -- UUIDv4, minted by the Customer
 
   customer_did      TEXT NOT NULL,
   runner_did        TEXT NOT NULL,
 
-  -- ── state ────────────────────────────────────────────────────────────
+  -- â”€â”€ state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   status            TEXT NOT NULL DEFAULT 'pending_payment'
     CHECK (status IN ('pending_payment','paid','accepted','in_transit',
                       'delivered','confirmed','cancelled','expired')),
   dispute_state     TEXT NOT NULL DEFAULT 'none'
     CHECK (dispute_state IN ('none','open','resolved','dismissed')),
 
-  -- ── money  (✍️ Customer; 👁️ read-only on the Runner device) ─────────
+  -- â”€â”€ money  (âœï¸ Customer; ðŸ‘ï¸ read-only on the Runner device) â”€â”€â”€â”€â”€â”€â”€â”€â”€
   total_zar         TEXT NOT NULL,           -- frozen from the price snapshot
   delivery_fee_zar  TEXT,
   monero_subaddress TEXT,                    -- [v1: mock provider]
@@ -235,7 +235,7 @@ CREATE TABLE orders (
   cancelled_by      TEXT CHECK (cancelled_by IN ('customer','runner')),
   cancel_reason     TEXT,                    -- e.g. 'cannot_fulfil'
 
-  -- ── delivery  (✍️ Runner; 👁️ read-only on the Customer device) ──────
+  -- â”€â”€ delivery  (âœï¸ Runner; ðŸ‘ï¸ read-only on the Customer device) â”€â”€â”€â”€â”€â”€
   delivery_geohash  TEXT,                    -- coarse; the exact address is in chat
   proof_cid         TEXT,                    -- pointer to the proof bundle
   proof_key         TEXT,                    -- random per order; unlocks that bundle
@@ -249,11 +249,11 @@ CREATE TABLE orders (
 ```
 
 **There is no delivery-address column.** The exact address exists in exactly one place:
-the body of an order-chat message (Q6, Q20). The Runner's `delivery_geohash` is coarse
+the body of an order-chat message (Q6, Q20). The Runnerâ€™s `delivery_geohash` is coarse
 enough to navigate a neighbourhood and useless as a record of where someone lives.
 
 ```sql
--- ✍️ Customer writes at placement; 👁️ Runner adopts verbatim.
+-- âœï¸ Customer writes at placement; ðŸ‘ï¸ Runner adopts verbatim.
 -- The unit price is a snapshot: a later price change never moves an existing order.
 CREATE TABLE order_items (
   id             TEXT PRIMARY KEY,
@@ -267,7 +267,7 @@ CREATE TABLE order_items (
 ```
 
 ```sql
--- ✍️ The device that observes the transition (Customer in v1).
+-- âœï¸ The device that observes the transition (Customer in v1).
 -- The audit trail that makes swapping MockPaymentProvider for a real gateway debuggable.
 CREATE TABLE payment_events (
   id          TEXT PRIMARY KEY,
@@ -285,8 +285,8 @@ CREATE TABLE payment_events (
 ## 4. Messages, proofs, wallet, mirrors
 
 ```sql
--- ✍️ Both apps write their own order thread.
--- body is readable text; SQLCipher is what protects it at rest (see §7).
+-- âœï¸ Both apps write their own order thread.
+-- body is readable text; SQLCipher is what protects it at rest (see Â§7).
 CREATE TABLE messages (
   id             TEXT PRIMARY KEY,           -- UUIDv4
   order_id       TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -309,7 +309,7 @@ The envelope is the retry payload while a message is queued. Once it is sent, th
 is cleared: it can never be read again anyway, and there is no reason to keep it around.
 
 ```sql
--- ✍️ Runner writes capture metadata; Customer writes the verdict. No local photo: only the CID.
+-- âœï¸ Runner writes capture metadata; Customer writes the verdict. No local photo: only the CID.
 CREATE TABLE proof_bundles (
   id                  TEXT PRIMARY KEY,
   order_id            TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -334,9 +334,9 @@ A rejected proof is re-uploaded as a new row; the order row is never rewritten. 
 coordinates exist in memory only, while the ZK location proof is generated.
 
 ```sql
--- ✍️ Runner device only. The payee holds the wallet; the seed is in secure storage.
+-- âœï¸ Runner device only. The payee holds the wallet; the seed is in secure storage.
 -- Wallet UX: 24-word seed, biometric-only unlock (no PIN fallback), duress PIN, auto subaddress labels, fee preview.
--- Recovery: seed phrase restore only. Biometric failure → recovery phrase entry.
+-- Recovery: seed phrase restore only. Biometric failure’ recovery phrase entry.
 CREATE TABLE wallet_metadata (
   id               INTEGER PRIMARY KEY CHECK (id = 1),
   primary_address  TEXT,
@@ -347,13 +347,13 @@ CREATE TABLE wallet_metadata (
 );
 ```
 
-### Mirrors — read-only on the device
+### Mirrors â€” read-only on the device
 
 These four tables exist on devices only as caches of admin-service state. The app never
 writes them, and a `sync_state` row records how stale each one is.
 
 ```sql
--- 👁️ Customer device only. Runners never see strikes (ADR-0005).
+-- ðŸ‘ï¸ Customer device only. Runners never see strikes (ADR-0005).
 CREATE TABLE strikes (
   id              TEXT PRIMARY KEY,          -- server-issued id
   subject_did     TEXT NOT NULL,             -- a Customer DID
@@ -362,7 +362,7 @@ CREATE TABLE strikes (
   acknowledged_at INTEGER                  -- local-only write
 );
 
--- 👁️ Both apps. This is also how a Customer discovers Runners at all.
+-- ðŸ‘ï¸ Both apps. This is also how a Customer discovers Runners at all.
 CREATE TABLE runner_directory (
   id                   TEXT PRIMARY KEY,     -- runner DID
   runner_did           TEXT NOT NULL,
@@ -375,7 +375,7 @@ CREATE TABLE runner_directory (
   last_active_at       INTEGER
 );
 
--- 👁️ Both apps.
+-- ðŸ‘ï¸ Both apps.
 CREATE TABLE platform_settings (
   id         TEXT PRIMARY KEY,               -- setting key
   key        TEXT NOT NULL,
@@ -383,7 +383,7 @@ CREATE TABLE platform_settings (
   updated_at INTEGER NOT NULL
 );
 
--- 👁️ Customer device: draft locally, upload when Tor returns. 👁️ Runner device: read-only.
+-- ðŸ‘ï¸ Customer device: draft locally, upload when Tor returns. ðŸ‘ï¸ Runner device: read-only.
 CREATE TABLE disputes (
   id               TEXT PRIMARY KEY,
   order_id         TEXT NOT NULL,
@@ -399,7 +399,7 @@ CREATE TABLE disputes (
   admin_response   TEXT
 );
 
--- One row per sync source. ✍️ Local bookkeeping only.
+-- One row per sync source. âœï¸ Local bookkeeping only.
 CREATE TABLE sync_state (
   id              TEXT PRIMARY KEY,          -- 'strikes'|'settings'|'directory'|'disputes'
   source          TEXT NOT NULL,
@@ -410,28 +410,28 @@ CREATE TABLE sync_state (
 ```
 
 **Install sets.** The Customer app installs every table above. The Runner app installs the
-same schema **minus `strikes`** — a Runner has no business holding a list of Customers and
+same schema **minus `strikes`** â€” a Runner has no business holding a list of Customers and
 what they were penalised for, and the sync source simply never populates it.
 
 ---
 
-## 5. Order state machine — who writes which edge
+## 5. Order state machine â€” who writes which edge
 
 `status` is a single field with state-dependent writers. This table is the contract; the
 query layer enforces it.
 
 | Edge | Actor |
 |---|---|
-| `pending_payment → paid` | Customer (payment observed; rows in `payment_events`) |
-| `pending_payment → expired` | whichever device observes the window lapse |
-| `pending_payment → cancelled` | Customer |
-| `paid → cancelled` (before acceptance) | Customer, or Runner with `cancel_reason='cannot_fulfil'` |
-| `paid → accepted` | **Runner** |
-| `accepted → in_transit` | **Runner** |
-| `in_transit → delivered` | **Runner** (writes `proof_cid`, `proof_key`, a `proof_bundles` row) |
-| `delivered → confirmed` | **Customer** (writes the verdict on the proof row) |
-| accepted → any dispute | Customer raises; Admin adjudicates; `dispute_state` changes, **not** `status` |
-| — | After `accepted`, a Customer can no longer cancel. That is the strike model's job. |
+| `pending_payment’ paid` | Customer (payment observed; rows in `payment_events`) |
+| `pending_payment’ expired` | whichever device observes the window lapse |
+| `pending_payment’ cancelled` | Customer |
+| `paid’ cancelled` (before acceptance) | Customer, or Runner with `cancel_reason='cannot_fulfil'` |
+| `paid’ accepted` | **Runner** |
+| `accepted’ in_transit` | **Runner** |
+| `in_transit’ delivered` | **Runner** (writes `proof_cid`, `proof_key`, a `proof_bundles` row) |
+| `delivered’ confirmed` | **Customer** (writes the verdict on the proof row) |
+| accepted’ any dispute | Customer raises; Admin adjudicates; `dispute_state` changes, **not** `status` |
+| â€” | After `accepted`, a Customer can no longer cancel. That is the strike model's job. |
 
 `dispute_state` is deliberately not a status value: a dispute freezes purge and is
 adjudicated alongside the delivery state machine, it does not replace it.
@@ -448,12 +448,12 @@ adjudicated alongside the delivery state machine, it does not replace it.
 | Proof bundle blob (Meshkit/IPFS) | 90 days | unpin request |
 | Non-current price lists | 30 days after being superseded | background sweep |
 | Contacts | indefinite | user-initiated |
-| Mirrors (`strikes`, `directory`, `settings`) | replaced on each successful sync | — |
+| Mirrors (`strikes`, `directory`, `settings`) | replaced on each successful sync | â€” |
 | Wallet metadata | indefinite | user-initiated wipe |
 | Admin: disputes | 1 year after resolution; `proof_key` cleared on close | admin-initiated |
 | Admin: strikes | indefinite while active | admin-initiated |
 
-**Purge implementation** — this is the fix for the v1 bug that would have wiped the database:
+**Purge implementation** â€” this is the fix for the v1 bug that would have wiped the database:
 
 ```typescript
 async function purgeExpiredData() {
@@ -464,7 +464,7 @@ async function purgeExpiredData() {
              Q.where('dispute_state', Q.notEq('open')))
       .fetch();
     for (const order of expired) {
-      await order.destroyPermanently();   // real DELETE — NOT unsafeResetDatabase()
+      await order.destroyPermanently();   // real DELETE â€” NOT unsafeResetDatabase()
     }
   });
   // WatermelonDB leaves no tombstones after destroyPermanently; reclaim the pages.
@@ -473,7 +473,7 @@ async function purgeExpiredData() {
 ```
 
 `markAsDeleted` is the wrong tool here: it sets `_status='deleted'` and waits for a sync
-that does not exist, so the row — and the plaintext — would sit on disk forever.
+that does not exist, so the row â€” and the plaintext â€” would sit on disk forever.
 
 ---
 
@@ -572,7 +572,7 @@ can review is a dispute a Customer chose to hand over, one key at a time.
 
 Recorded so nobody assumes these exist:
 
-- **Runner → admin reports.** Q7 scoped the service to registry, bans, disputes, strikes,
+- **Runner’ admin reports.** Q7 scoped the service to registry, bans, disputes, strikes,
   settings. A Runner who has a problem with a Customer contacts the Admin out of band, and
   the Admin issues a strike. If this becomes a real workflow, it is a new server table.
 - **Ratings / reputation.** `contacts.total_orders` style counters were dropped: with no
@@ -584,175 +584,22 @@ Recorded so nobody assumes these exist:
   Bans are a deterrent against casual abuse, not an identity system.
 - **Multi-runner or multi-item-per-runner inventory, cart abandonment, refunds.** Out of
   scope for the seven-item basket; a refund is a dispute outcome today.
-- **Exact delivery coordinates** — memory only, never a column (§4).
+- **Exact delivery coordinates.** memory only, never a column.
 
 ---
 
 ## 10. Data flow, end to end
 
-1. **Publish.** Runner sets prices and availability → signs → `price_lists` + `runner_prices`.
+1. **Publish.** Runner sets prices and availability’ signs’ `price_lists` + `runner_prices`.
 2. **Discover.** Customer syncs `runner_directory`, fetches and caches a Runner's list.
 3. **Order.** Customer writes `orders` (`pending_payment`) + `order_items` snapshots, sends
    the order and the address over the chat.
 4. **Pay.** Mock provider returns a subaddress and amount; every transition lands in
-   `payment_events`; `status` → `paid`.
-5. **Accept.** Runner adopts the order row, `status` → `accepted`.
+   `payment_events`; `status`’ `paid`.
+5. **Accept.** Runner adopts the order row, `status`’ `accepted`.
 6. **Deliver.** Runner captures photo + ZK proof, uploads the encrypted bundle, writes
    `proof_bundles` + `orders.proof_cid`, generates `proof_key`, sends it over the chat.
 7. **Confirm.** Customer fetches the bundle, decrypts with `proof_key`, verifies, writes the
-   verdict, `status` → `confirmed`.
-8. **Purge.** 30 days later the messages go; 90 days later the order goes — unless a dispute
+   verdict, `status`’ `confirmed`.
+8. **Purge.** 30 days later the messages go; 90 days later the order goes â€” unless a dispute
    is open, in which case the row is frozen until it resolves.
-
----
-
-## 11. New ADRs from Grilling Session (2026-10-04)
-
-The following ADRs were created during the grilling session to document decisions not in the original refinement:
-
-| ADR | Title | Summary |
-|-----|-------|---------|
-| 0006 | Signal Protocol: `react-native-libsignal-client` | Official libsignal Rust core via native bindings; custom TS store |
-| 0007 | Admin service: Rust + Axum | Memory safety, single binary, `arti` for Tor |
-| 0008 | Custom minimal relay in Rust | ~200 lines, Axum + Tokio + Arti, in-memory only |
-| 0009 | Monero gateway: AcceptXMR Rust library | Custom gateway, unified Rust stack |
-| 0010 | Dual storage: Meshkit S3 + Helia opt-in | Feature flag, both backends in v1 |
-| 0011 | Parallel roadmap | 4 tracks (A/B/C/D) + integration |
-| 0012 | Distribution: F-Droid + GrapheneOS/CalyxOS | No Play Store, reproducible builds |
-| 0013 | Security validation: Internal red-team + narvy SAST | 2-week pre-launch exercise |
-| 0014 | Converter: Full UnstoppableSwap in v1 | COMIT protocol BTC↔XMR atomic swaps |
-| 0015 | Runner onboarding: Invite-only pre-creation | Admin CLI pre-creates, runner claims |
-| 0016 | Admin API: REST + SSE | DID-signed requests, sync endpoints + push |
-| 0017 | Monorepo: Turborepo + Expo + Cargo | Cross-language task graph |
-| 0018 | DID: `@did-tools/key` | Lightweight `did:key` implementation |
-| 0019 | ZK proof: Port Zakura optimizations | 14x faster mobile proofs |
-| 0020 | Photo attestation: `@realreel/photo-attest` | C2PA + Secure Enclave/StrongBox + device attestation |
-| 0021 | Signal store: TypeScript over expo-sqlite | Pure TS, auditable, no native deps |
-| 0022 | Tor lifecycle: Foreground service + persistent notification | Always-on, battery saver toggle |
-| 0023 | Mock payment: Configurable scenarios | success/timeout/partial/double |
-| 0024 | Engineering philosophy | Silicon-grade, hacker paranoia, delightful UI |
-| 0025 | UI stack: Reusables + NativeWind + Reanimated 3 | shadcn/ui for RN, Tailwind, 60fps |
-| 0026 | Wallet UX | 24-word seed, biometric-only, duress PIN, auto labels, fee preview |
-| 0027 | Security flows | Seed restore, recovery phrase, Tor retry, auto re-key, geohash fallback |
-| 0028 | Admin API endpoints | 7 endpoints, DISPUTES, SSE, DID-signed |
-| 0029 | Relay protocol spec | SHA256, TTL, seq nums, backoff, 3 relays, 64KB |
-| 0030 | Dispute resolution | Refund=new payment, runner strikes 3=ban, 14-day timeout |
-| 0031 | Push notifications | UnifiedPush, self-hosted, encrypted payload |
-| 0032 | Error handling | Centralized error codes → messages |
-| 0033 | App lifecycle & permissions | Graceful fallbacks, biometric-only |
-| 0034 | Build/CI/CD | Reproducible, Hermes, EAS, GitHub Actions |
-| 0035 | Docs/Legal | AGPL-3.0, single privacy policy, F-Droid metadata |
-
----
-
-## 12. App Screen Flows (from Grilling)
-
-### Customer App (13 Screens + Converter Tab)
-1. **Onboarding** — Generate DID, backup 24-word seed, pseudonym, permissions
-2. **Home/Discover** — Nearby runners (runner_directory), filter by radius, availability + fee
-3. **Runner Profile** — Cached price list, items, delivery radius
-4. **Item Selection** — 7 catalog items, runner prices, quantity, running total
-5. **Address Entry** — Geocoded to geohash, saved addresses, map picker
-6. **Order Review** — Items, prices, delivery fee, total ZAR, est. XMR, 15-min expiry
-7. **Payment** — Monero subaddress + QR, countdown, status polling
-8. **Order Tracking** — Status timeline, runner coarse geohash, chat button
-9. **Order Chat** — Signal Protocol E2EE, text, photos, proof key
-10. **Delivery Verification** — Proof bundle (photo + ZK), accept/reject, dispute
-11. **Order History** — 90 days, filter, reorder
-12. **Disputes** — List, create, view admin response, share proof key
-13. **Settings** — Theme, radius, notifications, Tor status, backup DID, biometric, about
-**Converter Tab**: ZAR→XMR (XmrBazaar/Haveno/UnstoppableSwap)
-
-### Runner App (13 Screens + Converter Tab)
-1. **Onboarding** — DID + onion, claim pre-created registry (ADR-0015)
-2. **Dashboard** — Active orders, earnings, availability toggle
-3. **Price List Editor** — 7 items, prices, availability, delivery fee, sign & publish
-4. **Order Requests** — Incoming with countdown
-5. **Order Detail** — Items, address, chat
-6. **Accept/Reject** — Cannot cancel after accept
-7. **Active Order** — Navigation (coarse geohash), in_transit
-8. **Delivery Capture** — Camera + ZK proof + photo attest (@realreel/photo-attest)
-9. **Proof Review** — Preview before upload
-10. **Upload & Send Key** — IPFS upload, CID + proof_key over chat
-11. **Order History** — Completed, disputed
-12. **Wallet** — Balance, subaddresses (auto "Order #DMZ-XXX"), withdraw (XMR→ZAR via Haveno), backup (seed phrase, biometric-gated), duress PIN, fee preview
-13. **Settings** — Availability, radius, Tor, backup, about
-**Converter Tab**: XMR→ZAR (Haveno)
-
-### Converter Feature (Integrated Tab)
-- **Customer**: ZAR→XMR via XmrBazaar/Haveno deep links + UnstoppableSwap BTC→XMR
-- **Runner**: XMR→ZAR via Haveno
-- **Shared**: `SwapManager` in `@damz/core`
-
----
-
-## 13. Security Implementation Details
-
-### Wallet (Runner) — ADR-0026
-- **Seed**: 24 words (256-bit entropy)
-- **Unlock**: Biometric-only (FaceID/TouchID/Fingerprint), no PIN fallback
-- **Duress**: Fake PIN → nearly-empty wallet
-- **Subaddress labels**: Auto "Order #DMZ-XXX"
-- **Fee preview**: Shown before send
-- **Recovery**: Seed phrase only (biometric failure → recovery phrase entry)
-
-### Migration & Fallbacks — ADR-0027
-- **Identity migration**: Seed phrase restore on new device
-- **Biometric failure**: Recovery phrase entry (no PIN)
-- **Tor issues**: Exponential backoff retry + "Tor connecting..." + offline indicator (cached data)
-- **Signal session corruption**: Automatic re-keying (Signal Protocol handles)
-- **ZK proof failure**: Coarse geohash fallback (no ZK), retry with lower precision
-
-### Push Notifications — ADR-0031
-- **UnifiedPush** distributor (self-hosted on admin VPS)
-- Works over Tor, no Google/Apple
-- Encrypted payload via Signal session
-- Apps register via Tor on first launch
-
-### Error Handling — ADR-0032
-- Centralized error system: ErrorBoundary + error codes → user messages
-- Codes: TOR_CONNECTION_FAILED, PAYMENT_EXPIRED, ZK_PROOF_FAILED, etc.
-- Per-screen can override
-
-### Dispute Resolution — ADR-0030
-- Refund = runner sends new Monero payment (no chargebacks)
-- Runner strikes: 3 = ban (admin issues via CLI)
-- Timeout: 14 days auto-dismiss
-- Asymmetric: Customer raises, admin judges with customer's evidence only
-
----
-
-## 14. Build & CI/CD — ADR-0034
-
-**Monorepo**: Turborepo + Bun workspaces + Cargo workspaces
-- `apps/*` (Expo), `packages/*` (TS), `services/*` (Rust)
-
-**Pipeline** (GitHub Actions):
-1. Lint + Typecheck (`turbo run lint typecheck`)
-2. Unit Tests (`turbo run test`)
-3. Integration Tests (`turbo run test:integration`)
-4. Security Scan (`narvy-cli` on APK/IPA)
-5. Build Android APK + iOS IPA (EAS)
-6. E2E Tests (Maestro on emulator/simulator)
-7. Contract Tests (Admin API OpenAPI + Relay blob schema)
-8. Coverage Gate (fail if <70% on core)
-9. Deploy: APK to GitHub Releases, metadata to F-Droid
-
-**Requirements**:
-- Reproducible builds for F-Droid (mandatory)
-- Hermes bytecode compilation
-- AGPL-3.0 license
-
----
-
-## 15. Legal & Documentation — ADR-0035
-
-**Documents**:
-- ARCHITECTURE.md, API.md, DEPLOYMENT.md, USER_GUIDE_CUSTOMER.md, USER_GUIDE_RUNNER.md
-- SECURITY.md (threat model, audit results, responsible disclosure)
-- PRIVACY_POLICY.md (single policy: discloses Tor, Monero, XmrBazaar/Haveno, no personal data)
-- TERMS_OF_SERVICE.md (dispute resolution, no warranty)
-- F-Droid metadata (YAML: categories, license, source URL)
-- CHANGELOG.md
-
-**Privacy Policy**: Covers all features including converter (discloses XmrBazaar/Haveno interaction)

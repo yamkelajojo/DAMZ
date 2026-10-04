@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@damz/ui": ["../../packages/ui/src"],
+      "@damz/core": ["../../packages/core/src"],
+      "@damz/types": ["../../packages/types/src"],
+      "@damz/db": ["../../packages/db/src"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules", "dist", ".expo"]
+}

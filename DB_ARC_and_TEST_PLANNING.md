@@ -343,7 +343,8 @@ DAMZ follows MyMonero's pattern: seed in Keychain/Keystore, metadata in SQLCiphe
 | Encryption (AES-256-GCM) | `@ipfs-meshkit/meshkit` | 1.2+ | `github.com/IPFS-Meshkit/meshkit0` |
 | IPFS (v2) | Helia | 5+ | `helia.io` |
 | Monero crypto | `react-native-mymonero-core` | 0.4+ | `github.com/EdgeApp/react-native-mymonero-core` |
-| Signal Protocol | `expo-libsignal` | 0.2+ | `npmjs.com/package/expo-libsignal` |
+| Signal Protocol | `react-native-libsignal-client` | 0.5+ | `github.com/p-num/react-native-libsignal-client` |
+| UI Framework | React Native Reusables + NativeWind + Reanimated 3 | Latest | `github.com/react-native-reusables/reusables`, `nativewind.dev`, `docs.swmansion.com/react-native-reanimated` |
 
 
 ## Part II: Testing Strategy (V-Model + STLC)
@@ -471,6 +472,12 @@ For React Native, the E2E landscape in 2026 is dominated by **Maestro** for simp
 - **Biometric authentication**: Secure store access is gated by Face ID / fingerprint.
 - **Offline behavior**: Runner app works without network, syncs when connectivity is restored.
 - **Data purge**: Orders older than 90 days are automatically deleted.
+- **Customer screens**: Onboarding → Discover → Item Selection → Address → Review → Payment → Tracking → Chat → Verification → History → Disputes → Settings
+- **Runner screens**: Onboarding → Dashboard → Price List → Order Requests → Accept → Active Order → Capture → Upload → Wallet → Settings
+- **Converter flow**: ZAR→XMR (XmrBazaar deep link) → Order payment; BTC→XMR (UnstoppableSwap) → Order payment
+- **Dispute flow**: Raise → Admin review → Proof key share → Resolution → Refund
+- **Wallet flow**: Seed backup → Biometric unlock → Subaddress receive → Withdraw (XMR→ZAR) → Duress PIN
+- **Error states**: Tor down, relay down, payment expired, ZK proof failed, photo attestation failed
 
 ```yaml
 # Maestro flow: Place an order
@@ -592,6 +599,13 @@ Tests must verify both valid paths and invalid attempts.
 | **iOS Simulator** | E2E + UI testing | Xcode 16+, iOS 16+ |
 | **Physical Device** | Security + biometric testing | Pixel with GrapheneOS, iPhone with Secure Enclave |
 
+### 2.6.1 Contract Testing
+
+**Admin API**: OpenAPI spec validation — generate TypeScript client from spec, validate responses in CI.
+**Relay Protocol**: Blob format schema (JSON Schema) — validate PUT/GET request/response in CI.
+**Signal Protocol**: Test vectors from libsignal test suite — verify encryption/decryption round-trip.
+**Monero**: Test vectors from Monero test suite — verify subaddress derivation, transaction creation.
+
 ### 2.7 Requirements Traceability Matrix (Sample)
 
 | Req ID | Requirement | Test Cases | Status |
@@ -614,13 +628,14 @@ Testing must be automated and integrated into the CI/CD pipeline. The recommende
 Stage 1: Lint + Type Check     (eslint, tsc)
 Stage 2: Unit Tests            (jest --coverage)
 Stage 3: Integration Tests     (jest --testPathPattern=integration)
-Stage 4: Security Scan         (narvy scan --output sarif)
-Stage 5: Build APK/IPA         (expo prebuild + gradle/xcodebuild)
-Stage 6: E2E Tests             (maestro test flows/)
-Stage 7: Coverage Gate         (fail if < 70% on core modules)
+Stage 4: Contract Tests        (OpenAPI validation, Relay schema, libsignal vectors)
+Stage 5: Security Scan         (narvy scan --output sarif)
+Stage 6: Build APK/IPA         (expo prebuild + gradle/xcodebuild)
+Stage 7: E2E Tests             (maestro test flows/)
+Stage 8: Coverage Gate         (fail if < 70% on core modules)
 ```
 
-**Critical**: The security scan (Stage 4) must fail the pipeline if any hardcoded secrets, weak crypto, or insecure configuration is found. This is non-negotiable for an anonymity-focused app.
+**Critical**: The security scan (Stage 5) must fail the pipeline if any hardcoded secrets, weak crypto, or insecure configuration is found. This is non-negotiable for an anonymity-focused app.
 
 
 ## Summary of Key Decisions
@@ -635,3 +650,9 @@ Stage 7: Coverage Gate         (fail if < 70% on core modules)
 | Security standard | OWASP MASVS | Industry standard, 8 categories, 24 controls |
 | SAST tool | `narvy-cli` | Local, no account, high-signal findings |
 | Methodology | V-Model + STLC | Early test planning, security at every level |
+| Contract testing | OpenAPI + Relay schema + libsignal vectors | Client/server compatibility |
+| Wallet UX | 24-word seed, biometric-only, duress PIN | Max security, practical UX |
+| Push notifications | UnifiedPush (self-hosted) | No Google/Apple, works over Tor |
+| Distribution | F-Droid + GrapheneOS/CalyxOS | No Play Store, reproducible builds |
+| Converter | Integrated tab, UnstoppableSwap BTC↔XMR | In-app atomic swaps for BTC holders |
+| Dispute resolution | Asymmetric (customer raises, admin judges) | No runner evidence, 14-day timeout |

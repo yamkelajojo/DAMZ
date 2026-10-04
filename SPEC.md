@@ -143,37 +143,29 @@ I2P provides garlic routing and unidirectional tunnels, offering stronger resist
 
 ### 3.1 Signal Protocol (Content Encryption)
 
-**Library**: `expo-libsignal`
-**Source**: https://www.npmjs.com/package/expo-libsignal
-**Version**: 0.2.0
+**Library**: `react-native-libsignal-client`
+**Source**: https://github.com/p-num/react-native-libsignal-client
+**Version**: 0.5.0 (latest as of research)
 
-This is the Signal Protocol as an Expo Module for React Native apps. It provides identity management, 1:1 messaging (X3DH, Double Ratchet, Kyber), groups (Sender Keys), and Sealed Sender. It includes a SQLCipher-backed store for persistence.
+This wraps the official `libsignal` Rust core (used by Signal, WhatsApp, etc.) via Swift/Java/Kotlin bindings. It provides X3DH, Double Ratchet, Kyber PQ, Sender Keys, and Sealed Sender. You must provide your own SQLCipher-backed store implementation.
 
-**Requirements**: Expo 55+, React Native 0.83+, Android 7+ (SDK 36), iOS 15.1+. New architecture is required.
+**Requirements**: React Native 0.83+, Android 7+ (SDK 36), iOS 15.1+. New architecture required.
 
 **Installation**:
 
 ```bash
-bun add expo-libsignal
+bun add react-native-libsignal-client
 ```
 
-If using the bundled SQLCipher store, also install `expo-sqlite` and `expo-secure-store`.
+Also install `expo-sqlite` and `expo-secure-store` for the store.
 
-Add to `app.json`:
+No Expo plugin — you must run `npx pod-install` and configure native modules manually.
 
-```json
-{
-  "expo": {
-    "plugins": ["expo-libsignal"]
-  }
-}
-```
+**Signal Protocol Store**: TypeScript implementation over `expo-sqlite` (SQLCipher) + `expo-secure-store` (ADR-0021). Implements full `SignalProtocolStore` interface: prekeys, sessions, sender keys, identity keys. Long-term identity keys in Secure Store, ephemeral keys in SQLCipher DB.
 
-Then prebuild:
+### 3.4 UnifiedPush Notifications (ADR-0031)
 
-```bash
-bunx expo prebuild --clean
-```
+**Implementation**: Self-hosted UnifiedPush distributor (no Google/Apple dependency). Works over Tor. Encrypted payload via Signal session. Apps register via Tor on first launch. Push payload = encrypted Signal message. Battery efficient.
 
 **Usage pattern**:
 
@@ -206,7 +198,7 @@ const received = await bob.receive(envelope);
 console.log(received.plaintext); // 'hello'
 ```
 
-**Alternative**: `react-native-libsignal-client` (https://github.com/p-num/react-native-libsignal-client) wraps the official `libsignal` client library (Rust core exposed via Swift/Java/Kotlin bindings). This is a lower-level alternative if `expo-libsignal` does not meet your needs.
+**Alternative (rejected for v1)**: `expo-libsignal` (https://www.npmjs.com/package/expo-libsignal) — Expo-native wrapper with built-in SQLCipher store and Sealed Sender. Chose `react-native-libsignal-client` for cryptographic maturity (official libsignal Rust core) and to avoid Expo plugin lock-in.
 
 ### 3.2 Metadata-Resistant Relay (Cwtch-Inspired)
 
@@ -371,45 +363,14 @@ const addressInfo = await bridge.decodeAddress(
 
 ### 5.2 Payment Gateway (Server-Side, .onion)
 
-**Tool**: MoneroPay
-**Source**: https://github.com/moneropay/moneropay
-**Docs**: https://moneropay.eu
+**Tool**: Custom Rust gateway using `acceptxmr` library (ADR-0009)
+**Source**: https://github.com/busyboredom/acceptxmr
 
-MoneroPay is a standalone Monero payment processor for incoming and outgoing transactions. It provides a simple HTTP API for merchants who want to accept XMR. It supports subaddress-based payments, partial payments, and view-only or hot wallet modes.
+Build a custom Monero payment gateway in Rust using the `acceptxmr` library, deployed as a .onion service. Do not use MoneroPay.
 
-**API endpoints**:
+`acceptxmr` handles subaddress generation (from view key + primary address) and payment watching via monerod RPC. You build the HTTP API: `POST /receive` → returns subaddress + amount, `GET /receive/:address` → payment status, callback to relay on confirmation.
 
-**Create subaddress**:
-
-```
-POST /receive
-{
-  "amount": 123000000,
-  "description": "Order #DMZ-001",
-  "callback_url": "http://relay.onion/callback/moneropay_tio2foogaaLo9olaew4o"
-}
-```
-
-Response:
-
-```json
-{
-  "address": "84WsptnLmjTYQjm52SMkhQWsepprkcchNguxdyLkURTSW1WLo3tShTnCRvepijbc2X8GAKPGxJK9hfQhLHzoKSxh7y8Yqrg",
-  "amount": 123000000,
-  "description": "Order #DMZ-001",
-  "created_at": "2022-07-18T11:54:49.780542861Z"
-}
-```
-
-**Check payment status**:
-
-```
-GET /receive/:address?min=&max=
-```
-
-Response includes `complete: true` when the unlocked amount is equal to or greater than the specified amount.
-
-**DAMZ deployment**: MoneroPay runs as a `.onion` hidden service. It connects to a Monero node (also behind Tor or on localhost). It generates a unique subaddress per order. The `callback_url` points to the DAMZ relay, which notifies the runner via the messaging layer when payment is confirmed.
+Runs on same VPS as admin service + relay, all Rust, single binary or small set of binaries. monerod runs alongside (separate process, RPC over localhost). View-only mode: gateway only needs view key + primary address; spend key stays offline.
 
 ### 5.3 Alternative: AcceptXMR (Rust Library)
 
@@ -419,24 +380,26 @@ AcceptXMR is a Rust library that generates subaddresses using your private view 
 
 This is a lighter-weight alternative to MoneroPay if you prefer to build the gateway in Rust. It does not include an HTTP API — you would build that around it.
 
-### 5.4 ZAR ↔ XMR On-Ramp
+### 5.4 ZAR ↔ XMR On-Ramp (Converter Feature — Integrated in Customer/Runner Apps)
 
-**XmrBazaar**
-**Source**: https://xmrbazaar.com
+**Customer App**: "Convert" tab for ZAR→XMR before ordering
+- XmrBazaar / Haveno deep links for P2P exchange rates
+- UnstoppableSwap (COMIT protocol) for BTC→XMR atomic swaps in-app
+- No wallet, no swap execution — just rate display + deep links + atomic swap execution
 
-XmrBazaar is a South African P2P Monero marketplace with no KYC. Payments are via South African bank transfer / Instant EFT. Minimum transaction is R500; fees are 10% up to R50,000 and 5% over that. Most transactions complete within 1 hour. **XmrBazaar is not a middleman** — in direct payment orders, the buyer sends funds directly to the seller's personal wallet. A refund is not possible in case of dispute.
+**Runner App**: "Convert" tab for XMR→ZAR (cashing out earnings)
+- Haveno for XMR→ZAR
+- Direct to bank via P2P
 
-**Haveno DEX**
-**Source**: https://github.com/haveno-dex/haveno
+**Shared**: `@damz/core` has `SwapManager` for UnstoppableSwap logic. Converter does not hold funds.
 
-Haveno is an open-source platform to exchange Monero for fiat currencies. Communications are routed through Tor. Trades are peer-to-peer and non-custodial. Transactions between traders are secured by non-custodial multisignature transactions on the Monero network — 2-of-3 multisig, requiring two signatures (from the arbitrator and either the buyer or seller) to release funds.
+**XmrBazaar**: South African P2P Monero marketplace, no KYC, bank transfer/Instant EFT. Min R500, fees 10% up to R50k, 5% over. Direct payment, no middleman.
 
-**Atomic Swaps (BTC ↔ XMR)**
-**Source**: https://unstoppableswap.net
+**Haveno DEX**: Open-source, Tor-routed, non-custodial P2P. 2-of-3 multisig.
 
-UnstoppableSwap implements a maker-taker model for cross-chain atomic swaps between Monero and Bitcoin, using the COMIT protocol. This is relevant for users who hold BTC and want to convert to XMR without a centralized exchange.
+**UnstoppableSwap**: Maker-taker BTC↔XMR atomic swaps via COMIT protocol. For BTC holders to convert without centralized exchange.
 
-**DAMZ converter app**: The converter app does not hold funds. It displays live rates (scraped from XmrBazaar or a community-maintained IPFS feed), links to Haveno/XmrBazaar listings, and optionally integrates UnstoppableSwap for BTC holders.
+**Monero Stagenet** for all testing.
 
 ### 5.5 Monero Stagenet for Testing
 
@@ -574,40 +537,23 @@ Open-sourced under MIT/Apache 2.0 dual license.
 
 ---
 
-## 7. Storage Layer: IPFS with Client-Side Encryption
+## 7. Storage Layer: IPFS with Client-Side Encryption (Dual Backend — ADR-0010)
 
-**Library**: `@ipfs-meshkit/meshkit`
-**Source**: https://github.com/IPFS-Meshkit/meshkit0
+**Primary**: Meshkit S3 (MinIO behind Tor) — v1 default
+**Opt-in**: Helia (full IPFS node in React Native) — feature flag
 
-This is a TypeScript SDK for decentralized storage with two backends: Kubo/IPFS (Node.js) and S3-compatible object storage (browsers, mobile, Ionic/Capacitor). It has built-in client-side encryption — uploads are transparently encrypted with **AES-256-GCM** before leaving the device. The IPFS network and storage provider only ever see ciphertext.
+**Meshkit S3**:
+- `@ipfs-meshkit/meshkit` with S3-compatible backend
+- Client-side AES-256-GCM encryption before upload
+- MinIO behind Tor (.onion)
+- No IPFS daemon on mobile
 
-**Installation**:
+**Helia** (v2, opt-in v1):
+- Full IPFS in React Native (Helia v5 + custom storage adapter)
+- libp2p over Tor via `arti`
+- True decentralization, no S3 dependency
 
-```bash
-npm install @ipfs-meshkit/meshkit
-```
-
-**S3-compatible client (React Native)**:
-
-```typescript
-import { createS3Client } from '@ipfs-meshkit/meshkit';
-
-const client = createS3Client({
-  accessKeyId: process.env.STORAGE_KEY!,
-  secretAccessKey: process.env.STORAGE_SECRET!,
-  bucket: 'damz-proofs',
-  endpoint: 'https://<your-s3-compatible-endpoint>',
-});
-
-// Upload with automatic AES-256-GCM encryption
-const bytes = new TextEncoder().encode('proof bundle');
-const cid = await client.upload(bytes);
-console.log('Stored at key:', cid);
-```
-
-**Security details**: All encrypted payloads use the EMSH (Encrypted MeSHkit) wire format. Key derivation uses PBKDF2-SHA256 with 200,000 iterations (OWASP 2023 minimum).
-
-**Helia alternative**: Helia is an implementation of the IPFS protocol written entirely in TypeScript that runs in React Native. Helia v5 has connection management tuned for low-bandwidth/CPU environments such as React Native. `@helia/libp2p` adds libp2p networking to Helia. This is the more decentralized option but requires more setup than Meshkit's S3 path.
+**Storage abstraction** in `packages/core/storage` with `StorageBackend` trait. Feature flag `useHelia` in settings. Both backends produce compatible CIDs for `proof_bundles` table.
 
 ---
 
@@ -740,26 +686,29 @@ console.log('Stored at key:', cid);
   "name": "damz-customer",
   "version": "1.0.0",
   "main": "expo-router/entry",
-  "scripts": {
+"scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "tailwind": "tailwindcss --watch --input ./global.css --output ./dist/tailwind.css"
   },
   "dependencies": {
-    "expo": "~55.0.0",
-    "react-native": "0.83.0",
-    "react-native-nitro-tor": "^0.6.0",
-    "expo-libsignal": "^0.2.0",
-    "expo-sqlite": "*",
-    "expo-secure-store": "*",
-    "@credebl/ssi-mobile": "*",
-    "@hyperledger/anoncreds-react-native": "^0.1.0",
-    "@hyperledger/aries-askar-react-native": "^0.1.1",
-    "@hyperledger/indy-vdr-react-native": "^0.1.0",
-    "react-native-mymonero-core": "^0.4.0",
-    "@ipfs-meshkit/meshkit": "^1.2.1",
-    "@ajna-inc/poe-proofs": "^0.2.1"
-  }
+      "expo": "~55.0.0",
+      "react-native": "0.83.0",
+      "react-native-nitro-tor": "^0.6.0",
+      "react-native-libsignal-client": "^0.5.0",
+      "expo-sqlite": "*",
+      "expo-secure-store": "*",
+      "react-native-mymonero-core": "^0.4.0",
+      "@ipfs-meshkit/meshkit": "^1.2.1",
+      "@ajna-inc/poe-proofs": "^0.2.1",
+      "@did-tools/key": "^1.0.0",
+      "@realreel/photo-attest": "^1.0.0",
+      "nativewind": "^4.0.0",
+      "react-native-reusables": "^0.1.0",
+      "react-native-reanimated": "^3.10.0",
+      "react-native-gesture-handler": "^2.16.0"
+    }
 }
 ```
 
@@ -771,7 +720,6 @@ console.log('Stored at key:', cid);
     "name": "DAMZ",
     "slug": "damz",
     "plugins": [
-      "expo-libsignal",
       "expo-sqlite",
       "expo-secure-store"
     ],
@@ -792,6 +740,10 @@ console.log('Stored at key:', cid);
         "NSCameraUsageDescription": "DAMZ uses the camera to capture delivery proof photos.",
         "NSFaceIDUsageDescription": "DAMZ uses Face ID to protect your wallet and identity keys."
       }
+    },
+    "devDependencies": {
+      "tailwindcss": "^3.4.0",
+      "nativewind": "^4.0.0"
     }
   }
 }
@@ -799,20 +751,18 @@ console.log('Stored at key:', cid);
 
 ---
 
-## 11. Development Roadmap
+## 11. Development Roadmap (Parallel Tracks)
 
-| Phase | Deliverable | Dependencies |
-|---|---|---|
-| **Phase 1** | Tor transport prototype: two devices exchange an encrypted message via `.onion` | `react-native-nitro-tor` |
-| **Phase 2** | Signal Protocol chat: two devices exchange E2EE messages | `expo-libsignal` |
-| **Phase 3** | Monero payment: stagenet subaddress generation + payment detection | `MoneroPay`, `react-native-mymonero-core` |
-| **Phase 4** | Location proof: generate + verify ZK location proof on device | `@ajna-inc/poe-proofs` |
-| **Phase 5** | Photo attestation: capture + sign + verify hardware-backed photo | `@realreel/photo-attest` |
-| **Phase 6** | IPFS storage: encrypted upload + retrieval of proof bundle | `@ipfs-meshkit/meshkit` |
-| **Phase 7** | DID identity: wallet creation + DIDComm connection | `@credebl/ssi-mobile` |
-| **Phase 8** | Integration: wire all components into single order lifecycle | All above |
-| **Phase 9** | Relay infrastructure: deploy discardable relay + MoneroPay gateway + IPFS pinner as `.onion` services | Server-side |
-| **Phase 10** | Mainnet deployment: switch from stagenet to mainnet, deploy converter app | All |
+| Track | Phases | Deliverable | Dependencies |
+|---|---|---|---|
+| **A: Transport + Messaging** | P1 + P2 | Tor daemon + Signal Protocol chat (E2EE over `.onion`) | `react-native-nitro-tor`, `react-native-libsignal-client` |
+| **B: Device Capabilities** | P3 + P4 + P5 | Monero payment (mock) + ZK location proof + Photo attestation | `react-native-mymonero-core`, `@ajna-inc/poe-proofs`, `@realreel/photo-attest` |
+| **C: Storage + Identity** | P6 + P7 | IPFS storage (Meshkit S3 + Helia flag) + `did:key` identity | `@ipfs-meshkit/meshkit`, `helia`, custom `did:key` impl |
+| **D: Server Infrastructure** | P9 | Discardable relay + AcceptXMR gateway + IPFS pinner (all `.onion`) | Rust, `axum`, `acceptxmr`, `minio`, `arti` |
+| **Integration** | P8 | Wire all tracks into complete order lifecycle + converter tabs | Tracks A–D complete |
+| **Production** | P10 | Mainnet deploy: stagenet → mainnet | Integration complete |
+
+**Parallelization notes**: Tracks A, B, C are independent and can run concurrently. Track D starts when Track A has working Tor. Integration (P8) is the critical synchronization point — budget 40% of timeline.
 
 ---
 
@@ -836,15 +786,14 @@ console.log('Stored at key:', cid);
 |---|---|---|
 | Tor RN | `react-native-nitro-tor` | https://github.com/smolcars/react-native-nitro-tor |
 | Onion gen | `mkp224o` | https://github.com/cathugger/mkp224o |
-| Signal Proto | `expo-libsignal` | https://www.npmjs.com/package/expo-libsignal |
-| Signal Proto (alt) | `react-native-libsignal-client` | https://github.com/p-num/react-native-libsignal-client |
+| Signal Proto | `react-native-libsignal-client` | https://github.com/p-num/react-native-libsignal-client |
+| Signal Proto (rejected) | `expo-libsignal` | https://www.npmjs.com/package/expo-libsignal |
 | SimpleX | `simplexmq` | https://github.com/simplex-chat/simplexmq |
 | Cwtch | Cwtch protocol | https://docs.cwtch.im |
-| DID/SSI | `@credebl/ssi-mobile` | https://github.com/credebl/mobile-sdk |
+| DID | `@did-tools/key` | https://github.com/did-tools/key |
 | Anonymous email | LNemail | https://github.com/lnemail/lnemail |
 | Monero RN | `react-native-mymonero-core` | https://github.com/EdgeApp/react-native-mymonero-core |
-| Monero gateway | MoneroPay | https://github.com/moneropay/moneropay |
-| Monero gateway (alt) | AcceptXMR | https://github.com/busyboredom/acceptxmr |
+| Monero gateway | AcceptXMR | https://github.com/busyboredom/acceptxmr |
 | ZAR P2P | XmrBazaar | https://xmrbazaar.com |
 | DEX | Haveno | https://github.com/haveno-dex/haveno |
 | Atomic swaps | UnstoppableSwap | https://unstoppableswap.net |
@@ -857,6 +806,7 @@ console.log('Stored at key:', cid);
 | IPFS storage | `@ipfs-meshkit/meshkit` | https://github.com/IPFS-Meshkit/meshkit0 |
 | IPFS RN | Helia | https://helia.io |
 | Monero testnet | Stagenet | https://docs.getmonero.org |
+| Push | UnifiedPush | https://unifiedpush.org |
 | Privacy OS | GrapheneOS | https://grapheneos.org |
 | Privacy OS | CalyxOS | https://calyxos.org |
 

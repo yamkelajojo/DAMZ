@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@damz/ui": ["packages/ui/src"],
+      "@damz/core": ["packages/core/src"],
+      "@damz/types": ["packages/types/src"],
+      "@damz/db": ["packages/db/src"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build", ".expo", ".turbo"]
+}

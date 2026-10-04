@@ -1,0 +1,101 @@
+@import "nativewind";
+
+@theme {
+  /* Colors are defined in tailwind.config.js and exposed via NativeWind v4 @theme */
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+/* NativeWind v4 uses CSS variables for theming */
+/* Light theme (default) */
+:root {
+  --color-bg-primary: #FFFCF9;
+  --color-bg-secondary: #FAF7F4;
+  --color-surface-primary: #F0ECE5;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-sunken: #E6DFD6;
+  --color-border-subtle: #E6DFD6;
+  --color-border: #DCCFC4;
+  --color-border-strong: #CEC0B3;
+  --color-text-primary: #020101;
+  --color-text-secondary: #6B625C;
+  --color-text-tertiary: #7B716A;
+  --color-text-disabled: #968D84;
+  --color-text-inverse: #FFF9F5;
+  --color-text-brand: #FFD801;
+  --color-action-primary-bg: #FFD801;
+  --color-action-primary-fg: #020101;
+  --color-action-primary-pressed: #E6C200;
+  --color-action-secondary-bg: #FFF3CC;
+  --color-action-secondary-fg: #B39700;
+  --color-action-secondary-border: #F0E0A0;
+  --color-action-destructive-bg: #B42318;
+  --color-action-destructive-fg: #FFFFFF;
+  --color-status-success: #2D6A4F;
+  --color-status-success-soft: #E5F1EB;
+  --color-status-warning: #8A5A00;
+  --color-status-warning-soft: #FFF4D6;
+  --color-status-error: #B42318;
+  --color-status-error-soft: #FDE8E7;
+  --color-overlay: rgba(2, 1, 1, 0.4);
+}
+
+/* Dark theme */
+.dark {
+  --color-bg-primary: #020101;
+  --color-bg-secondary: #0A0A0A;
+  --color-surface-primary: #1A1A1A;
+  --color-surface-elevated: #242424;
+  --color-surface-sunken: #101010;
+  --color-border-subtle: #333333;
+  --color-border: #444444;
+  --color-border-strong: #555555;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #E0E0E0;
+  --color-text-tertiary: #B0B0B0;
+  --color-text-disabled: #888888;
+  --color-text-inverse: #020101;
+  --color-text-brand: #FFD801;
+  --color-action-primary-bg: #FFD801;
+  --color-action-primary-fg: #020101;
+  --color-action-primary-pressed: #E6C200;
+  --color-action-secondary-bg: #2A2500;
+  --color-action-secondary-fg: #FFE066;
+  --color-action-secondary-border: #444000;
+  --color-action-destructive-bg: #E06C5C;
+  --color-action-destructive-fg: #FFFFFF;
+  --color-status-success: #6EC88A;
+  --color-status-success-soft: #1E3D2B;
+  --color-status-warning: #FFD85D;
+  --color-status-warning-soft: #3F3400;
+  --color-status-error: #F98070;
+  --color-status-error-soft: #3D1C1A;
+  --color-overlay: rgba(0, 0, 0, 0.6);
+}
+
+/* Reanimated 3: ensure UI thread animations work */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
