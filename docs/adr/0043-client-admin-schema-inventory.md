@@ -13,8 +13,10 @@ and `swap_events`) are absent from those implementation artifacts. `ROADMAP.md` 
 claims the client schema has 20 tables, but no twentieth client table is defined in v2.
 
 The Admin service has a separate Rust/SQLite schema described in
-`services/admin/SPEC.md` and `DB_LAYOUT_AND_ARCH.md` §8. Its five current server-side
-tables are not part of the mobile WatermelonDB install sets. This boundary is consistent
+`services/admin/SPEC.md` and `DB_LAYOUT_AND_ARCH.md` §8. Its five server-side
+tables at the time of this inventory reconciliation were not part of the mobile
+WatermelonDB install sets; ADR-0029 later adds the Admin-only `wipe_pending` table, still
+outside the client schema. This boundary is consistent
 with ADR-0007, which specifies a separate API contract for the Rust service, but conflicts
 with the refinement-session wording that the Admin service reuses the client schema's type
 definitions.
@@ -64,14 +66,15 @@ and contains no such statements, so the validator does not inspect the declared 
 
 - The client implementation is short three documented tables and requires a versioned,
   additive schema migration before the Phase 1 schema gate can pass.
-- The Admin service remains outside the client schema package. Its current five tables,
-  and any future Admin-only tables such as `wipe_pending` from the remote-wipe decision,
-  do not increase the 19-table client inventory.
+- The Admin service remains outside the client schema package. Its separate six-table
+  schema now includes Admin-only `wipe_pending` under ADR-0029; no Admin table increases
+  the 19-table client inventory.
 - Documentation, schema code, model/type definitions, migration logic, validator, and
   tests must be checked against the same 19-table inventory before implementation is
   considered ready.
-- This decision does not change the anonymity model, table ownership, or bounded Admin
-  service scope.
+- This schema-inventory decision does not change the anonymity model or table ownership.
+  The Admin service's later narrow scope extension is recorded separately in ADR-0029 and
+  still does not merge the Admin schema with the client schema.
 
 ## Open Questions
 

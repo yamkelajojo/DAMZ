@@ -22,11 +22,11 @@ The persona that accepts an order, procures the goods, and delivers them. The ru
 _Avoid_: driver, courier, seller, vendor, salesman
 
 **Admin**:
-The single authority that approves and bans runners, adjudicates disputes, and issues strikes. In this project the Admin and the developer are the same person.
+The single authority that approves and bans runners, adjudicates disputes, issues strikes, and may issue app-data wipe commands for verified managed Android installations. In this project the Admin and the developer are the same person.
 _Avoid_: operator, moderator, owner
 
 **Admin service**:
-The one bounded, Tor-hidden service the Admin operates. It is authoritative for moderation state — runner registry, bans, strikes, disputes, platform settings — and holds no order, chat, or proof content.
+The one bounded, Tor-hidden service the Admin operates. It is authoritative for runner registry, bans, strikes, disputes, and platform settings, plus the narrow `wipe_pending` command metadata for best-effort DAMZ app-data wipes on verified managed Android installations (ADR-0029). It holds no order, chat, or proof content and is not a central user database.
 _Avoid_: backoffice, dashboard backend, central server
 
 **Catalog**:

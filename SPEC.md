@@ -63,7 +63,7 @@ damz/
 - The adversary may operate malicious relay nodes.
 - The adversary may attempt a forensic memory capture while an app is unlocked; ADR-0028 keeps wallet secrets and the optional view-key PIN out of JavaScript and shortens their native-memory lifetime. Privileged live-process capture remains a residual risk.
 - The adversary does not control a rooted/jailbroken operating system (kernel-level memory extraction is out of scope).
-- There is no central user database, custodial wallet, or central store of order, chat, proof, or identity data. No service holds a mnemonic seed or spend key; the AcceptXMR gateway holds only the Runner's private view key in encrypted view-only configuration for payment monitoring (ADR-0009). The Admin service is authoritative only for moderation state and holds zero rows of order, message, or proof data.
+- There is no central user profile/account database or custodial wallet, and no central store of order, chat, or proof content. The Admin service holds only bounded pseudonymous moderation DIDs and the narrowly scoped target app DID/command metadata in `wipe_pending` for best-effort DAMZ app-data erasure on verified managed Android installations (ADR-0029); it holds zero rows of order, message, or proof data. No service holds a mnemonic seed or spend key; the AcceptXMR gateway holds only the Runner's private view key in encrypted view-only configuration for payment monitoring (ADR-0009).
 
 **Out of scope**:
 - Compromised operating system (rooted/jailbroken device).
@@ -71,6 +71,25 @@ damz/
 - Rubber-hose cryptanalysis.
 
 ---
+
+### 1.1 Managed Android Remote App-Data Wipe (ADR-0029)
+
+The Admin CLI may issue a signed, target-DID-bound, expiring command only for a verified
+managed Android Customer or Runner installation. The Admin service queues the command in
+its separate `wipe_pending` table; the client schema remains exactly 19 tables. Delivery
+uses the existing authenticated Admin API over Tor, with startup/resume polling as a fallback
+to the `wipe.pending` SSE wake-up event.
+
+The native app handler stops wallet work, zeroizes live wallet-secret buffers, deletes
+DAMZ-owned Android Keystore/secure-storage credentials and encryption keys, removes the
+SQLCipher database and sidecars, and clears app-private caches/content. It retains the DID
+signing credential only until it can attempt a completion receipt after local cleanup, then
+deletes that credential. The handler reports completion only if its local cleanup succeeds. This is best-effort app-data/key deletion,
+not a factory reset or guarantee of forensic sanitization. It does not cover iOS, unmanaged
+Android, external exports, other devices, Admin moderation state, relay/IPFS content, or
+the separately configured AcceptXMR view key. Offline, force-stopped, uninstalled, or
+compromised devices may not execute the command; the Admin service must not claim success
+without an app-reported completion receipt.
 
 ## 2. Network Layer: Tor
 

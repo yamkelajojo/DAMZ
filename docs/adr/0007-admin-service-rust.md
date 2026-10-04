@@ -17,4 +17,4 @@ The single Tor-hidden admin service (registry, bans, strikes, disputes, settings
 - Tor hidden service via `arti-client` (Rust Tor implementation) or `tor-rtcompat` with system Tor.
 - Single static binary deployable to any Linux VPS behind Tor.
 - Steeper initial development cost; lower long-term maintenance risk.
-- Admin service is tiny (~10 endpoints, 5 tables) — the Rust learning curve is bounded.
+- Admin service remains bounded; ADR-0029 adds the sixth Admin-only table, `wipe_pending`, for managed-Android app-data wipe metadata. It does not change the Rust/Axum implementation choice or the 19-table client schema.

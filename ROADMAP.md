@@ -51,6 +51,7 @@
   - SQLCipher DB initialization with `expo-secure-store` key
   - `did:key` generation via `@did-tools/key` (ADR-0018)
   - Native-only 25-word Monero mnemonic generation, backup, and recovery (ADR-0028; biometric-gated)
+  - Managed-Android-only native app-data/key wipe handler (ADR-0029); no iOS or unmanaged-Android remote-wipe handler
   - Onboarding screen (1 of 13)
   - Settings screen (13 of 13) — theme, radius, Tor status, backup DID
 - `packages/ui` primitives: Button, Input, Card, Sheet, Toast, ThemeProvider
@@ -65,12 +66,14 @@
 - [ ] Native-only 25-word backup/restore works (new-device simulation); no wallet secret or phrase crosses into JavaScript
 - [ ] Biometric unlock gates native secure-store access for seed/spend-key operations
 - [ ] Optional private view-key PIN-derived HKDF, if persisted, runs wholly in native code with no PIN/key crossing into JavaScript
+- [ ] Native wipe-state test with a synthetic Admin-signed command on managed Android stops wallet work, zeroizes native buffers, removes app keys/SQLCipher DB and sidecars/caches, and does not reset the device; iOS/unmanaged Android reject or lack the feature (ADR-0029, OQ-SEC-WIPE-001/002)
 - [ ] Tor starts, shows onion address in settings
-- [ ] Unit tests: DIDManager, TorManager, DB init
+- [ ] Unit tests: DIDManager, TorManager, DB init, native wipe state machine
 
 **Risks**:
 - `react-native-nitro-tor` stability on iOS/Android
 - Native `SecureMemory` / Keychain/Keystore behavior and platform-specific memory-locking support (OQ-SEC-MEM-001/002)
+- Android management-enrollment proof and native wipe interruption/sidecar handling (OQ-SEC-WIPE-001/002)
 - Biometric behavior differences across supported devices
 - Hermes + SQLCipher performance
 
@@ -86,6 +89,7 @@
   - Onion service generation via `mkp224o` (dev) / Tor daemon (prod)
   - Runner onboarding: claim pre-created registry (ADR-0015)
   - Independent local Monero wallet using native `SecureMemory`; native-only 25-word mnemonic backup and recovery
+  - Managed-Android-only native app-data/key wipe handler (ADR-0029); no iOS or unmanaged-Android remote-wipe handler
   - Dashboard screen (2 of 13)
   - Settings screen (13 of 13) — availability, radius, Tor, backup
 - Shared `packages/core` identity logic
@@ -99,11 +103,13 @@
 - [ ] Runner wallet secrets remain in platform secure storage via native `SecureMemory`; no wallet secret or phrase crosses into JavaScript
 - [ ] Native-only 25-word backup/recovery and biometric-gated seed/spend-key access work
 - [ ] Optional private view-key PIN-derived HKDF, if persisted, runs wholly in native code with no PIN/key crossing into JavaScript
-- [ ] Unit tests: Runner onboarding and native wallet boundary
+- [ ] Native wipe-state test with a synthetic Admin-signed command on managed Android verifies target/expiry/replay controls and removes Runner app keys/database/sidecars/caches without a device reset; iOS/unmanaged Android are excluded (ADR-0029, OQ-SEC-WIPE-001/002)
+- [ ] Unit tests: Runner onboarding, native wallet boundary, and native wipe state machine
 
 **Risks**:
 - Onion service generation reliability (`mkp224o` vs in-app)
 - Tor hidden service config in `react-native-nitro-tor`
+- Android management-enrollment proof and native wipe interruption/sidecar handling (OQ-SEC-WIPE-001/002)
 
 ---
 
@@ -231,18 +237,19 @@
 
 ## Phase 8: Admin Service + Admin Dashboard (Local Testnet)
 
-**Goal**: Admin service runs locally, manages runners, strikes, disputes, settings; apps sync mirrors.
+**Goal**: Admin service runs locally, manages runners, strikes, disputes, settings, and the narrowly scoped managed-Android app-data wipe queue; apps sync mirrors.
 
 **Deliverables**:
 - `services/admin` binary (Rust + Axum + SQLCipher + Arti)
-- Admin CLI (runner add/ban, strike issue, dispute resolve, settings)
-- REST + SSE sync endpoints (ADR-0016, ADR-0033)
+- Admin CLI (runner add/ban, strike issue, dispute resolve, settings, wipe issue/list/cancel)
+- Admin-only `wipe_pending` table (sixth Admin table; no client table or change to the 19-table schema) (ADR-0029)
+- REST + SSE sync endpoints, including target-only wipe fetch/ack and `wipe.pending` wake-up (ADR-0016, ADR-0033, ADR-0029)
 - Bounded-scope startup check (ADR-0041)
 - DID-signed request auth
 - Apps sync `strikes`, `directory`, `settings`, `disputes` mirrors
 - Minimal admin dashboard (web, served by admin service or separate)
 
-**Dependencies**: Phase 4 (relay for dispute notifications), Phase 5 (Signal for proof key share)
+**Dependencies**: Phases 2–3 (Customer/Runner native wipe handlers), Phase 4 (relay for dispute notifications), and Phase 5 (Signal for proof key share)
 
 **Test Gate**:
 - [ ] Admin CLI: add runner → runner claims → appears in directory
@@ -250,14 +257,18 @@
 - [ ] Customer submits dispute → Admin sees in CLI
 - [ ] Admin requests proof key → Customer shares → Admin decrypts proof
 - [ ] Admin resolves dispute → Customer sees ruling
-- [ ] SSE push works (strike.created, runner.banned, dispute.updated)
-- [ ] Bounded-scope check passes (no order data in admin DB)
-- [ ] Contract tests: OpenAPI spec, sync cursors
+- [ ] SSE push works (strike.created, runner.banned, dispute.updated, wipe.pending); startup/resume polling also retrieves a pending wipe
+- [ ] Managed Android wipe command is Admin-signed, target-DID/app-bound, single-use, expires within 72 hours, and only a verified enrolled device can fetch/ack it
+- [ ] Customer and Runner managed-Android app-data wipe completes natively; iOS/unmanaged Android are excluded, and no factory reset occurs
+- [ ] `accepted` is not reported as completion; `completed` is stored only after a successful native-handler receipt
+- [ ] Bounded-scope check permits only the defined `wipe_pending` control fields while still rejecting all order/message/proof content
+- [ ] Contract tests: OpenAPI spec, sync cursors, wipe command/ack
 
 **Risks**:
 - Rust `arti` Tor integration
 - `sqlx` + SQLCipher compile-time checks
 - SSE over Tor connection stability
+- Android Enterprise/MDM enrollment proof, offline delivery, truthful app-reported completion, and finite encrypted-backup retention for terminal target DIDs (OQ-SEC-WIPE-001/002/003; OQ-003 before production)
 
 ---
 
@@ -347,6 +358,7 @@
 - [ ] Dispute flow works end-to-end
 - [ ] Data purge works (30d messages, 90d orders)
 - [ ] Security scan (`narvy-cli`) passes on built APKs
+- [ ] End-to-end managed-Android app-data wipe passes on enrolled test installations; verify only app-scoped keys/data are removed and offline targets are never reported as completed
 
 **Risks**:
 - Real Tor network latency/variance

@@ -18,6 +18,7 @@ Graceful fallbacks for all permission denied scenarios.
 - Background: Tor foreground service keeps running → Relay polls → UnifiedPush wakes app
 - Foreground: Immediate message fetch → Mark read → Sync
 - Termination: Tor stops (unless orders active) → Save state
+- Managed-Android wipe (ADR-0029): validate the signed target-bound command → stop wallet work and perform native app-data/key erasure → attempt signed completion receipt → delete remaining identity credential and exit. The command does not factory-reset the device and does not apply to iOS or unmanaged Android.
 
 **Permissions** (requested at appropriate time):
 

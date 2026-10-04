@@ -276,11 +276,13 @@ a dispute outcome, and exact delivery coordinates as a persisted value.
 ### Resolution
 
 Following ADR-0043, the canonical client-side inventory is 19 tables: the 16 implemented
-client tables plus the three converter tables already approved in v2. The Admin service
-has a separate server-side schema; its five tables are not part of the mobile table count.
-The roadmap count is corrected to 19. Admin/client interoperability is through the service
-API contract, not shared WatermelonDB schema artifacts. No twentieth client table is
-introduced, and the three approved converter tables are not removed.
+client tables plus the three converter tables already approved in v2. At the time of this
+reconciliation, the Admin service had five tables in its separate server-side schema; ADR-0029
+later adds the Admin-only `wipe_pending` table as a narrow control-plane extension. Neither
+the original five nor the later sixth Admin table is part of the mobile table count. The
+roadmap count is corrected to 19. Admin/client interoperability is through the service API
+contract, not shared WatermelonDB schema artifacts. No twentieth client table is introduced,
+and the three approved converter tables are not removed.
 
 ### Alternatives considered
 
@@ -409,6 +411,41 @@ The user confirmed that all Monero wallet secrets—including the seed, spend ke
 
 ---
 
+## Post-refinement addendum — managed Android app-data remote wipe (ADR-0029)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted documentation decision; implementation deferred to the Customer, Runner, and Admin phases.
+
+### C18 — Remote-wipe scope and Admin-boundary conflict
+
+**Observed state**:
+
+- The Admin service was documented as moderation-only in ADR-0001, ADR-0007, and ADR-0041, while the requested `wipe_pending` feature requires a narrowly scoped device-control queue.
+- The Admin service had five server-side tables, separate from the canonical 19 client-side WatermelonDB tables. A remote-wipe queue must not become a client table or be included in that 19-table count.
+- The request established managed Android as the only supported platform, but the phrase “remote wipe” did not itself distinguish DAMZ app-data deletion from an operating-system factory reset. The user clarified that the command erases DAMZ app data and keys only; it does not reset the device. iOS and unmanaged Android are excluded.
+
+**Resolution**:
+
+ADR-0029 adds `wipe_pending` as the sixth, Admin-only table for minimal, pseudonymous, target-bound command metadata. This is an explicit narrow extension of the Admin authority, not a central user database: no device serial, advertising ID, profile, location, wallet material, order/chat/proof content, or exported user content is stored. The client schema remains exactly 19 tables, and the Admin schema remains separate.
+
+Only a verified enrolled managed Android Customer or Runner installation may receive a command. Admin CLI issuance requires fresh authentication, exact typed DID/app confirmation, verified management enrollment, an Admin Ed25519 signature, a one-time nonce, and a bounded expiry. Delivery is target-bound over the existing DID-signed Admin API through Tor. The native app handler stops wallet work, zeroizes native wallet buffers, deletes app-scoped keys and credentials, removes the SQLCipher database and sidecars, and clears app-private caches. `accepted` means the command was accepted; `completed` is only the app's report after its native handler succeeds. The feature is best effort and does not claim forensic sanitization, full-device reset, or execution on an offline/force-stopped/uninstalled device. It cannot erase iOS/unmanaged installations, other devices, remote copies, Admin moderation records, or the gateway's separate Runner view key.
+
+ADR-0001, ADR-0007, and ADR-0041 are explicitly narrowed by ADR-0029 only to permit this command metadata; all exclusions of order, message, and proof content and the prohibition on a central user database remain. The exact management-enrollment proof and Android wipe-interruption behavior remain owned implementation gates, not implicit capabilities.
+
+**Alternatives considered**:
+
+- Factory-reset a managed device — rejected by the user's app-data-only choice and would require a different, broader device-management authority.
+- Add iOS or unmanaged Android support — rejected; neither platform is covered by this mechanism.
+- Add a twentieth client table for wipe jobs — rejected; wipe command state belongs only to the separate Admin schema.
+- Claim guaranteed/forensic deletion or mark a command complete on delivery — rejected because device availability and flash-storage behavior cannot support that claim.
+
+**Consequences and follow-up**:
+
+`docs/adr/0029-managed-android-app-data-remote-wipe.md`, `docs/adr/0038-app-lifecycle.md`, `services/admin/SPEC.md`, `DB_LAYOUT_AND_ARCH.md`, `SPEC.md`, `ARCHITECTURE.md`, `THREAT-MODEL.md`, `ROADMAP.md`, `DB_ARC_and_TEST_PLANNING.md`, `CONTEXT.md`, `GLOSSARY.md`, the Admin-scope/API ADRs, and the client ownership contract document the same platform/scope/schema boundary. `OQ-SEC-WIPE-001` (verified enrollment proof and DID binding) is owned by Admin/Developer and must be resolved before Phase 8 remote-wipe API acceptance and rollout. `OQ-SEC-WIPE-002` (native Android deletion, sidecars, and interrupted-wipe validation) is owned by Admin/Developer and must be resolved at Customer Phase 2 and Runner Phase 3 native-wipe gates before Phase 8 end-to-end acceptance. `OQ-SEC-WIPE-003` (finite retention for encrypted Admin backup snapshots containing terminal wipe-target DIDs) is owned by Admin/Developer and must be resolved before Phase 8 production deployment. Planned test cases are recorded but remain unrun. No runtime code, installations, or builds are changed in this documentation directive; no TODOs are introduced.
+
+---
+
 ## Decision Log
 
 | ID | Decision | Status |
@@ -434,6 +471,7 @@ The user confirmed that all Monero wallet secrets—including the seed, spend ke
 | Q21 | Runners never see customer strikes | ✅ A (ADR-0005) |
 | Q22 | Wallet was Runner-only | Superseded by ADR-0028 (Customer + Runner local wallets) |
 | Q23 | Customer and Runner each have an independent local Monero wallet | ✅ ADR-0028 |
+| Q24 | Remote wipe is app-data/key erasure on verified managed Android only; no full-device reset, iOS, or unmanaged Android | ✅ ADR-0029 |
 
 ## ADRs created
 
@@ -491,6 +529,7 @@ filename topic, and status. The five requested ADRs will use the newly available
 ### Consequences
 
 This is an identifier and reference migration only. No existing design decision is removed,
-reversed, or superseded. The updated ADR files and this mapping preserve traceability; all
-future in-repository references use the new IDs. The new ADRs 0028–0032 will be added in
-subsequent, separately reviewed directive commits.
+reversed, or superseded by the renumbering. The updated ADR files and this mapping preserve
+traceability; all future in-repository references use the new IDs. ADR-0028 (Secure Memory)
+and ADR-0029 (Managed Android App-Data Remote Wipe) have since been added as separately
+reviewed directives. ADR-0030–0032 remain reserved for later directives.

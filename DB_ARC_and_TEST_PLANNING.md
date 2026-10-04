@@ -21,7 +21,7 @@ The database architecture for DAMZ must satisfy four non-negotiable constraints 
 
 1. **Zero Plaintext at Rest** — Every byte of user data (DIDs, order records, chat history, wallet seeds, proof bundles) must be encrypted on device before it touches any storage layer.
 
-2. **No Central Store of User Data** — There is no central store of order content, chat content, proof content, or user identity. The Admin service is authoritative only for moderation state and holds zero rows of order, message, or proof data. The "database" is a combination of encrypted local storage and content-addressed decentralized storage (IPFS).
+2. **No Central User Database** — There is no central user profile/account database or central store of order, chat, or proof content. The separate Admin service holds bounded pseudonymous moderation DIDs and, under ADR-0029, only the target app DID and command metadata required for managed-Android DAMZ app-data wipes; it holds zero rows of order, message, or proof data. The "database" is a combination of encrypted local storage and content-addressed decentralized storage (IPFS). This Part I is superseded by `DB_LAYOUT_AND_ARCH.md`; this precise boundary is also recorded in ADR-0041.
 
 3. **Offline-First** — Runners operate in areas with intermittent connectivity. Every operation must succeed locally and sync when connectivity is restored.
 
@@ -640,6 +640,39 @@ wallet phases. No runtime tests are run as part of this documentation directive.
   limits/zeroization behavior, and apply the approved platform fallback if `mlock()` is
   unavailable (OQ-SEC-MEM-001).
 
+### 2.6.3 Managed Android Remote-Wipe Test Gate (ADR-0029)
+
+These are planned acceptance tests for both mobile apps and the Admin service. They remain
+pending until their Customer/Runner native-wallet and Admin phases; no runtime tests are run
+as part of this documentation directive.
+
+- **Eligibility and schema — TC-SEC-WIPE-01**: issue commands only for verified enrolled
+  managed Android installations; reject iOS, unmanaged Android, an absent/invalid
+  enrollment proof, or a DID/app-role mismatch. Confirm `wipe_pending` is Admin-only and
+  the client schema remains exactly 19 tables.
+- **Command integrity — TC-SEC-WIPE-02**: reject a bad Admin signature, modified target,
+  app role, scope, expiry, or nonce; verify command expiry is bounded to 72 hours and that
+  a cancelled, expired, replayed, or duplicate command cannot trigger a second wipe.
+- **Target delivery and receipts — TC-SEC-WIPE-03**: only the matching target DID/app can
+  fetch or acknowledge a command. Verify `accepted` is not shown as completion, and
+  `completed` is recorded only after the native handler reports success; if the final
+  receipt cannot be sent, do not claim remote completion.
+- **Native app-data erase — TC-SEC-WIPE-04**: stop wallet work, zeroize live native wallet
+  buffers, remove app-owned Android Keystore/secure-storage wallet credentials and other
+  DAMZ-only keys, delete the SQLCipher key and database/WAL/SHM/journal files, and clear
+  app-private caches. Confirm a fresh app process cannot reopen the wiped database or
+  recover erased keys. Seed, spend key, private view key, and view-key PIN must never enter
+  JavaScript/JSI during the wipe.
+- **Failure and scope — TC-SEC-WIPE-05 to TC-SEC-WIPE-06**: exercise offline/expired,
+  force-stop, interrupted deletion, and missing-receipt cases; verify idempotent retry and
+  truthful state. Confirm no factory reset, no iOS/unmanaged-device support, no deletion of
+  other app installations or remote/external copies, and no secrets in logs/crash reports.
+  Do not claim forensic sanitization of flash storage.
+- **Enrollment proof gate**: test the selected Android Enterprise/MDM attestation and
+  app-installation-to-DID binding before enabling production issuance (OQ-SEC-WIPE-001).
+  Validate minimum supported Android versions and interrupted-wipe behavior before the
+  Customer/Runner native-wipe and Admin integration gates (OQ-SEC-WIPE-002).
+
 ### 2.7 Requirements Traceability Matrix (Sample)
 
 | Req ID | Requirement | Test Cases | Status |
@@ -655,6 +688,9 @@ wallet phases. No runtime tests are run as part of this documentation directive.
 | REQ-SEC-MEM-01 | Customer and Runner wallet secrets and the view-key PIN never cross the JavaScript/JSI boundary | TC-SEC-MEM-01 to TC-SEC-MEM-04 | Pending |
 | REQ-SEC-MEM-02 | Native wallet-secret buffers are locked where supported and zeroized on every exit path | TC-SEC-MEM-05 to TC-SEC-MEM-08 | Pending |
 | REQ-SEC-MEM-03 | Optional private view-key PIN/HKDF handling stays native; neither PIN nor key enters JavaScript; seed/spend keys stay biometric-only | TC-SEC-MEM-09 to TC-SEC-MEM-11 | Pending |
+| REQ-SEC-WIPE-01 | Only verified managed Android app installations may receive a valid, target-bound, signed, unexpired app-data wipe command | TC-SEC-WIPE-01 to TC-SEC-WIPE-03 | Pending |
+| REQ-SEC-WIPE-02 | Native wipe erases DAMZ app-scoped keys, database, sidecars, and caches without exposing wallet secrets to JavaScript | TC-SEC-WIPE-04 | Pending |
+| REQ-SEC-WIPE-03 | Wipe is best-effort app-data deletion only; no iOS/unmanaged support, device reset, or false completion claim | TC-SEC-WIPE-05 to TC-SEC-WIPE-06 | Pending |
 | REQ-WALLET-01 | Both apps support native-only backup/recovery of the full 25-word Monero mnemonic | TC-WALLET-01 to TC-WALLET-04 | Pending |
 | REQ-MSG-01 | Messages E2EE with Signal Protocol | TC-MSG-01 to TC-MSG-06 | Pending |
 

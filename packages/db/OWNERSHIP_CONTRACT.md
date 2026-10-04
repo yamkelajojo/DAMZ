@@ -14,9 +14,10 @@ This document defines the **enforceable ownership contract** for the DAMZ databa
 **Core Principle**: Every column has exactly one writer. All other devices/services are read-only mirrors.
 
 This contract covers the **19 client-side WatermelonDB tables**. The Rust Admin service
-uses a separate server-side schema and API contract (ADR-0007, ADR-0043); Admin-role
-entries here describe authority for mirrored client records, not a shared WatermelonDB
-schema.
+uses a separate server-side schema and API contract (ADR-0007, ADR-0029, ADR-0043); its
+Admin-only `wipe_pending` control table is not part of this contract or either app's local
+schema. Admin-role entries here describe authority for mirrored client records, not a
+shared WatermelonDB schema.
 
 ---
 
@@ -255,6 +256,20 @@ pub fn assert_admin_can_write(table: &str, column: &str) -> Result<(), Error> {
         ("strikes", "notes"),
         ("platform_settings", "value"),
         ("platform_settings", "updated_at"),
+        // ADR-0029: narrow Admin-only app-wipe command metadata; never a client table.
+        ("wipe_pending", "id"),
+        ("wipe_pending", "target_did"),
+        ("wipe_pending", "target_app"),
+        ("wipe_pending", "scope"),
+        ("wipe_pending", "reason_code"),
+        ("wipe_pending", "nonce"),
+        ("wipe_pending", "issued_at"),
+        ("wipe_pending", "expires_at"),
+        ("wipe_pending", "status"),
+        ("wipe_pending", "accepted_at"),
+        ("wipe_pending", "completed_at"),
+        ("wipe_pending", "requested_by"),
+        ("wipe_pending", "command_signature"),
     ];
     
     if !ALLOWED.iter().any(|(t, c)| *t == table && *c == column) {
@@ -263,6 +278,11 @@ pub fn assert_admin_can_write(table: &str, column: &str) -> Result<(), Error> {
     Ok(())
 }
 ```
+
+For `wipe_pending`, the Admin CLI creates or cancels only a `pending` command. The target
+app may advance `status`, `accepted_at`, and `completed_at` only through the Admin API after
+verification of the command ID, nonce, app role, and target-DID signature. This is the
+separate Admin schema, not a client-side `admin` write permission.
 
 ---
 
@@ -305,7 +325,7 @@ describe('Database Ownership Contract', () => {
     expect(() => assertCanWrite('orders', 'total_zar', 'runner')).toThrow('Ownership violation');
   });
   
-  // Admin can only write moderation tables
+  // In the client database, Admin writes allowed moderation mirrors only; wipe_pending is Admin-DB-only
   test('admin can write dispute status', () => {
     expect(() => assertCanWrite('disputes', 'status', 'admin')).not.toThrow();
   });

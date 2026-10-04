@@ -14,6 +14,7 @@
 - **Platform-level surveillance**: Google Play Services, Apple telemetry, app store analysis
 - **Server compromise**: Relay, gateway, IPFS pinner, admin service infrastructure
 - **Physical device seizure**: Device confiscation while locked
+- **Destructive command misuse**: Admin credential compromise or operator error could enqueue a wipe for the wrong installation
 
 **Capabilities Assumed**:
 - Observes all network traffic (metadata, timing, volume)
@@ -42,7 +43,7 @@
 | Photo attestation | Delivery evidence | C2PA + device attestation; hardware-bound signing |
 | IPFS storage | Proof bundles | Client-side AES-256-GCM; key sent separately over Signal chat |
 | Local storage | App data and wallet secrets | SQLCipher for app data; Keychain/Keystore at rest; native `SecureMemory` for wallet-secret access |
-| Admin service | Moderation state | Tor-hidden; DID-signed requests; SQLite+SQLCipher; no order data |
+| Admin service and `wipe_pending` | Moderation state plus minimal managed-Android app-wipe command metadata | Tor-hidden; DID-signed requests; Admin-signed target/role/scope/expiry/nonce; explicit CLI confirmation; SQLite+SQLCipher; no order/chat/proof content or general user profile |
 
 ---
 
@@ -58,6 +59,7 @@
 | **Ephemerality** | Auto-purge (30d msgs, 90d orders) | Purge job tests, dispute freeze tests |
 | **Tamper evidence** | SQLCipher + signed price lists | narvy SAST, signature verification tests |
 | **Reduced wallet-secret exposure in unlocked-app memory dumps** | Native `SecureMemory` in both apps, `mlock()`, `secure_memset()`, and no JavaScript wallet-secret values | Planned native buffer lifecycle tests and platform verification (Phases 2–3) |
+| **Managed Android app-data response** | One-time Admin-signed `wipe_pending` command; native deletion of app-scoped keys/database/caches; no iOS or unmanaged-device claim | Planned command authorization, replay, expiry, and native-wipe tests (ADR-0029; Phases 2, 3, 8) |
 
 ---
 
@@ -137,6 +139,29 @@ it does not eliminate the JavaScript-heap exposure of decrypted messages describ
 The architecture mitigates stale/swapped wallet-secret exposure, not all forensic memory
 dumps or live privileged memory access.
 
+### 4.5 Managed Android Remote Wipe Limitations (ADR-0029)
+
+**Risk**: A remote app-data wipe may fail to arrive or finish. A device that is offline,
+force-stopped, uninstalled, unable to reach the Admin service over Tor, or controlled by a
+compromised OS may not process the command before its bounded expiry. A `completed` state
+is the app's signed report after its native cleanup handler returns; it is not independent
+proof that every flash-storage remnant has been erased.
+
+**Scope boundary**: The command deletes only DAMZ app-private data and keys on a verified,
+enrolled managed Android Customer or Runner installation. It does not factory-reset the
+device, cover iOS or unmanaged Android, erase another installation, remove external exports,
+relay/IPFS/peer copies, Admin moderation records, Monero history, or the AcceptXMR gateway's
+separate Runner view-key configuration. Deleting the local wallet keys without a separate
+backup can make that wallet unrecoverable.
+
+**Misuse risk**: A compromised Admin credential or mistaken target can destroy a user's
+local identity, wallet, and order history. Mitigations are Admin-CLI-only issuance, fresh
+authentication, exact typed DID/app confirmation, verified management enrollment, a signed
+fixed-scope command, one-time nonce, bounded expiry, and a minimal audit record. The Admin
+service must distinguish `accepted` from app-reported `completed`; it must not report an
+offline target as wiped. These controls reduce, but do not eliminate, operator error or
+Admin compromise.
+
 ---
 
 ## 5. Threat Model Validation
@@ -149,6 +174,7 @@ dumps or live privileged memory access.
 5. Monero subaddress linkability across orders
 6. Relay compromise simulation
 7. Admin service SQL injection, auth bypass, evidence tampering
+8. Managed-Android wipe command authorization, target binding, replay/expiry, enrollment proof, and interrupted native erase (ADR-0029)
 
 **Output**: `SECURITY.md` with findings, mitigations, residual risk register
 

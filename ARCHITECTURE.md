@@ -1,7 +1,7 @@
 # DAMZ Architecture
 
 **Version**: 1.0
-**Status**: v2 architecture reference with security decisions recorded through ADR-0028
+**Status**: v2 architecture reference with security decisions recorded through ADR-0029
 **Last Updated**: 2026-10-04
 **Owner**: Admin/Developer
 
@@ -18,9 +18,12 @@ DAMZ has two local-first mobile applications and one bounded Admin service:
   pays, communicates with a Runner, and confirms delivery.
 - **Runner app** holds the Runner's independent local Monero wallet, publishes signed
   prices, and fulfils orders.
-- **Admin service** is a Tor-hidden Rust service authoritative only for runner registry,
-bans, strikes, disputes, and platform settings. It does not store wallet secrets or wallet
-state, order, chat, or proof content, and is not a central user database.
+- **Admin service** is a Tor-hidden Rust service authoritative for runner registry, bans,
+strikes, disputes, and platform settings. Under ADR-0029 it also stores the minimal,
+pseudonymous `wipe_pending` command metadata for best-effort DAMZ app-data erasure on
+verified managed Android installations only. It does not store wallet secrets or wallet
+state, order, chat, or proof content, and it is not a central user database. The Admin
+schema is separate from the 19-table client schema.
 
 Customer and Runner devices keep their own SQLCipher-protected databases and independent
 wallets; neither complete wallet is shared or held by the Admin service. On-device wallet
@@ -96,10 +99,33 @@ production wallet operations. Platform support and native secure-storage migrati
 tracked as Open Questions in ADR-0028, with resolution required before the Customer and
 Runner wallet onboarding phases.
 
-## 4. Related Documents
+## 4. Managed Android Remote App-Data Wipe (ADR-0029)
+
+A verified, enrolled managed Android Customer or Runner installation may receive a
+one-time, Admin-Ed25519-signed, expiring wipe command. The Admin CLI creates the command;
+`wipe_pending` is the sixth table in the separate Admin schema, not a new client table. The
+service returns a command only to the matching app-installation DID and role over the
+existing DID-signed Admin API and Tor. `wipe.pending` is a wake-up hint; apps also check on
+startup/resume. iOS and unmanaged Android are excluded.
+
+The command's scope is fixed to DAMZ app-private data and keys, not an operating-system
+factory reset. The native handler stops wallet work, zeroizes live wallet-secret buffers
+through `SecureMemory`, deletes local wallet, Signal, and SQLCipher credentials, closes
+and removes the encrypted database and sidecars, and clears app-private caches. It keeps
+the DID signing credential only long enough to send the completion receipt after cleanup,
+then deletes it. The receipt is an app report, not independent verification. This is best effort: offline or force-stopped devices may not receive
+it, and the app's receipt is not proof of physical flash sanitization. It cannot reach
+external exports, other installations, Admin moderation records, remote relay/IPFS data,
+or the AcceptXMR gateway's separate view-key configuration. Enrollment-proof and native
+wipe-interruption validation remain implementation gates in ADR-0029.
+
+## 5. Related Documents
 
 - `SPEC.md` — component choices and end-to-end system flows.
 - `DB_LAYOUT_AND_ARCH.md` — client-side schema, ownership, storage, and Admin schema.
 - `THREAT-MODEL.md` — adversaries, security properties, and residual risks.
 - `docs/adr/0028-secure-memory-management.md` — secure-memory decision and implementation
   constraints.
+- `docs/adr/0029-managed-android-app-data-remote-wipe.md` — managed-Android app-data wipe
+  scope, Admin queue, limitations, and implementation gates.
+- `services/admin/SPEC.md` — separate Admin API and six-table schema, including `wipe_pending`.

@@ -458,9 +458,10 @@ adjudicated alongside the delivery state machine, it does not replace it.
 | Non-current price lists | 30 days after being superseded | background sweep |
 | Contacts | indefinite | user-initiated |
 | Mirrors (`strikes`, `directory`, `settings`) | replaced on each successful sync | — |
-| Wallet metadata | indefinite | user-initiated wipe |
+| Wallet metadata | indefinite | user-initiated wipe; managed-Android app-data wipe (ADR-0029) |
 | Admin: disputes | 1 year after resolution; `proof_key` cleared on close | admin-initiated |
 | Admin: strikes | indefinite while active | admin-initiated |
+| Admin: `wipe_pending` | pending/accepted until completed/cancelled/expired; terminal metadata ≤30 days | Admin-issued managed-Android command; expiry ≤72 hours (ADR-0029) |
 
 **Purge implementation** — this is the fix for the v1 bug that would have wiped the database:
 
@@ -519,10 +520,11 @@ Two notes the v1 document got wrong or left open:
 
 ## 8. The admin service
 
-Tor-hidden **Rust + Axum** process, one SQLCipher file in WAL mode (Q18, ADR-0007). The five
+Tor-hidden **Rust + Axum** process, one SQLCipher file in WAL mode (Q18, ADR-0007). The six
 tables shown below form a separate Admin-service schema; they are not among the 19
-client-side WatermelonDB tables in §§2–4. Similarly named mirror tables on devices are
-distinct records. The service uses the separate API contract described in ADR-0007.
+client-side WatermelonDB tables in §§2–4. `wipe_pending` is Admin-only command metadata,
+not a client table. Similarly named mirror tables on devices are distinct records. The
+service uses the separate API contract described in ADR-0007 and ADR-0029.
 
 ```sql
 CREATE TABLE admin_identity (      -- exactly one admin; you
@@ -574,10 +576,41 @@ CREATE TABLE platform_settings (
   value      TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- Admin-only metadata for best-effort managed-Android app-data wipes (ADR-0029)
+CREATE TABLE wipe_pending (
+  id                 TEXT PRIMARY KEY,
+  target_did         TEXT NOT NULL,
+  target_app         TEXT NOT NULL CHECK (target_app IN ('customer', 'runner')),
+  scope              TEXT NOT NULL DEFAULT 'app_data' CHECK (scope = 'app_data'),
+  reason_code        TEXT NOT NULL CHECK (
+    reason_code IN ('device_lost', 'device_retired', 'security_incident')
+  ),
+  nonce              TEXT NOT NULL UNIQUE,
+  issued_at          INTEGER NOT NULL, -- UTC Unix seconds
+  expires_at         INTEGER NOT NULL, -- UTC Unix seconds
+  status             TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'accepted', 'completed', 'cancelled', 'expired')),
+  accepted_at        INTEGER,          -- UTC Unix seconds
+  completed_at       INTEGER,          -- UTC Unix seconds
+  requested_by       TEXT NOT NULL,
+  command_signature  TEXT NOT NULL
+);
+
+CREATE INDEX idx_wipe_pending_target
+  ON wipe_pending(target_did, target_app, status, expires_at);
+
+CREATE UNIQUE INDEX idx_one_active_wipe_per_target
+  ON wipe_pending(target_did, target_app)
+  WHERE status IN ('pending', 'accepted');
 ```
 
 The service holds **no** order rows, **no** messages, and **no** proof blobs. A dispute it
-can review is a dispute a Customer chose to hand over, one key at a time.
+can review is a dispute a Customer chose to hand over, one key at a time. The single
+additional device-control datum is a pseudonymous app-installation DID in `wipe_pending`;
+it is not a device serial, advertising ID, user profile, or central user database. The table
+contains no business content and never changes the 19-table client inventory. See
+`services/admin/SPEC.md` and ADR-0029 for command authorization, status, expiry, and limits.
 
 ---
 
@@ -598,6 +631,7 @@ Recorded so nobody assumes these exist:
 - **Multi-runner or multi-item-per-runner inventory, cart abandonment, refunds.** Out of
   scope for the eight-item basket; a refund is a dispute outcome today.
 - **Exact delivery coordinates** — memory only, never a column (§4).
+- **Whole-device wipe or non-managed-platform remote wipe** — ADR-0029 permits only best-effort erasure of DAMZ app-private data and keys on an enrolled managed Android installation. It does not factory-reset the device and does not cover iOS or unmanaged Android.
 
 ---
 
@@ -649,6 +683,7 @@ the grilling and follow-up documentation sessions:
 | 0026 | Runner wallet UX | Biometric-only, duress PIN, auto labels, fee preview; phrase length superseded by ADR-0028 |
 | 0027 | Security flows | Seed restore, recovery phrase, Tor retry, auto re-key, geohash fallback |
 | 0028 | Secure memory and native wallet boundary | Independent Customer and Runner wallets; native-only 25-word Monero seed handling |
+| 0029 | Managed Android app-data remote wipe | Admin-only `wipe_pending`; DAMZ app data/keys only, best effort |
 | 0033 | Admin API endpoints | 7 endpoints, DISPUTES, SSE, DID-signed |
 | 0034 | Relay protocol spec | SHA256, TTL, seq nums, backoff, 3 relays, 64KB |
 | 0035 | Dispute resolution | Refund=new payment, runner strikes 3=ban, 14-day timeout |
@@ -657,7 +692,7 @@ the grilling and follow-up documentation sessions:
 | 0038 | App lifecycle & permissions | Graceful fallbacks, biometric-only |
 | 0039 | Build/CI/CD | Reproducible, Hermes, EAS, GitHub Actions |
 | 0040 | Docs/Legal | AGPL-3.0, single privacy policy, F-Droid metadata |
-| 0041 | Bounded Admin service limits | Precise moderation-only authority and data scope |
+| 0041 | Bounded Admin service limits | Bounded moderation scope plus ADR-0029's narrow managed-Android wipe metadata |
 | 0042 | Testing methodology and tool selection | V-Model, STLC, CI and test tooling |
 | 0043 | Client/Admin schema inventory reconciliation | 19 client tables; separate Admin schema; validator alignment |
 
@@ -724,6 +759,13 @@ the grilling and follow-up documentation sessions:
 - **Tor issues**: Exponential backoff retry + "Tor connecting..." + offline indicator (cached data)
 - **Signal session corruption**: Automatic re-keying (Signal Protocol handles)
 - **ZK proof failure**: Coarse geohash fallback (no ZK), retry with lower precision
+
+### Managed-Android Remote App-Data Wipe — ADR-0029
+- Applies only to Customer/Runner installations verified as enrolled, managed Android devices; no iOS or unmanaged Android coverage.
+- The Admin CLI creates a signed, expiring, target-DID-bound `wipe_pending` command. It is Admin-only metadata, not a client table; the client schema remains 19 tables.
+- The native handler zeroizes live wallet buffers, deletes app-scoped KeyStore credentials and encryption keys, closes/removes the SQLCipher database and sidecars, clears app-private caches, and then reports its result if connectivity permits.
+- This is best-effort deletion of DAMZ app data and keys, not a device factory reset or guarantee of forensic sanitization. It cannot reach another installation, external exports, Admin moderation records, relay/IPFS content, or the AcceptXMR gateway's separately configured view key.
+- Enrollment attestation and native wipe interruption behavior remain implementation gates OQ-SEC-WIPE-001/002 in ADR-0029.
 
 ### Push Notifications — ADR-0036
 - **UnifiedPush** distributor (self-hosted on admin VPS)
