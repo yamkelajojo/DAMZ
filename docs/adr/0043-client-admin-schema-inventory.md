@@ -22,8 +22,9 @@ with the refinement-session wording that the Admin service reuses the client sch
 definitions.
 
 Finally, `packages/db/scripts/validate-schema.ts` searches the TypeScript WatermelonDB
-schema source for SQL `CREATE TABLE` statements. The checked-in schema uses `Schema(...)`
-and contains no such statements, so the validator does not inspect the declared schema.
+schema source for SQL `CREATE TABLE` statements. The checked-in schema uses
+`appSchema(...)` and contains no such statements, so the validator does not inspect the
+declared schema.
 
 ## Decision
 
@@ -45,8 +46,8 @@ and contains no such statements, so the validator does not inspect the declared 
 5. The schema validator must validate the actual TypeScript WatermelonDB schema and its
    declared table/column inventory; it must not treat an empty SQL-regex parse as success.
 6. Schema implementation, migration, validator, and test changes follow the documentation
-   review gate. This ADR records the target inventory; it does not claim those changes are
-   already implemented.
+   review gate. The v1-to-v2 migration path is resolved below; the implementation must pass
+   the Phase 1 upgrade gate before release.
 
 ## Alternatives Considered
 
@@ -61,26 +62,59 @@ and contains no such statements, so the validator does not inspect the declared 
   the already-recorded converter decision.
 - **Keep the current validator unchanged** — rejected: it cannot validate the
   TypeScript schema source as written and may miss missing tables.
+- **Split converter tables into a separate v3 migration** — rejected for this branch by
+  the user-selected resolution of OQ-SCHEMA-001; the documented v2 catalog upgrade and
+  converter-table additions will ship as one additive v1-to-v2 migration. Release must
+  verify that no incompatible v2 migration has already shipped to supported devices.
+
+## Resolution — OQ-SCHEMA-001 (2026-10-04)
+
+**Owner**: Admin/Developer. **Status**: Resolved by user selection.
+
+Use a single additive WatermelonDB migration from schema version 1 to version 2. Its
+`schemaMigrations` steps create exactly `swaps`, `exchange_offers`, and `swap_events` from
+the shared raw table-definition specs from which `appSchema` is built. The post-open
+catalog initializer separately fills missing reference rows, including Grape Soda, so
+partially seeded v1 databases are
+upgraded without duplicate rows. The migration does not drop/recreate existing tables or
+reset user data. The database package advances from 1.0.0 to 1.1.0 under the approved
+additive-minor versioning rule. The Customer and Runner client schema remains separate from
+the Admin service schema; no Admin table is included in the mobile migration.
+
+The migration-registration unit test is required, and a device/database upgrade test from
+an actual v1 SQLCipher database remains a Phase 1 release gate. If a v2 migration has
+already shipped outside this checkout, implementation/release must stop and the migration
+sequence be reassessed before deployment.
 
 ## Consequences
 
-- The client implementation is short three documented tables and requires a versioned,
-  additive schema migration before the Phase 1 schema gate can pass.
+- Schema version 2 adds the three documented converter tables through one additive
+  WatermelonDB migration; the catalog initializer backfills Grape Soda without overwriting
+  existing rows. Existing v1 client data is preserved.
+- The package semver follows the approved strategy's additive-minor rule (1.0.0 to 1.1.0).
+- Release remains gated on a real v1-to-v2 device/database upgrade test; unit assertions of
+  migration registration are not a substitute for that upgrade test.
 - The Admin service remains outside the client schema package. Its separate six-table
   schema now includes Admin-only `wipe_pending` under ADR-0029; no Admin table increases
   the 19-table client inventory.
 - Documentation, schema code, model/type definitions, migration logic, validator, and
-  tests must be checked against the same 19-table inventory before implementation is
-  considered ready.
+  tests must be checked against the same 19-table inventory before the schema phase is
+  considered complete.
 - This schema-inventory decision does not change the anonymity model or table ownership.
   The Admin service's later narrow scope extension is recorded separately in ADR-0029 and
   still does not merge the Admin schema with the client schema.
 
 ## Open Questions
 
-- **OQ-SCHEMA-001**: Confirm the migration and upgrade path for adding the three existing
-  v2 converter tables to the current WatermelonDB schema version. **Owner**: Admin/Developer.
-  **Target resolution**: before schema implementation and its Phase 1 migration-test gate.
 - **OQ-SCHEMA-002**: Choose and verify a validator implementation that inspects the actual
   WatermelonDB schema and fails when a required table or column is missing. **Owner**:
   Admin/Developer. **Target resolution**: before the Phase 1 schema-validation gate.
+- **OQ-SCHEMA-003**: Confirm the canonical client SQLCipher adapter package, import, version,
+  and supported options/API. The current source imports WatermelonDB's standard
+  `SQLiteAdapter` while passing `cipherKey` and calling adapter methods not present in the
+  0.27.0 public typings; the declared `@nozbe/watermelondbcipher@^0.27.0` returned HTTP 404
+  from the public npm registry in this environment. Do not claim local database encryption
+  or release the migration until this is resolved and verified against the native adapter.
+  **Owner**: Admin/Developer. **Target resolution**: before the Phase 1 SQLCipher upgrade /
+  release gate. Any adapter or storage-architecture replacement requires a separate ADR and
+  user confirmation.

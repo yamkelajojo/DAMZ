@@ -7,6 +7,7 @@
 
 import { Database } from '@nozbe/watermelondb';
 import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
+import { migrations } from './migrations';
 import { schema } from './schemas/schema';
 import { CUSTOMER_MODELS, RUNNER_MODELS, MODELS, TABLES } from './models';
 import * as SecureStore from 'expo-secure-store';
@@ -49,6 +50,7 @@ export async function getDatabaseKey(): Promise<string> {
 function createAdapter(key: string): SQLiteAdapter {
   return new SQLiteAdapter({
     schema,
+    migrations,
     dbName: DB_NAME,
     cipherKey: key,
     jsi: true, // Use JSI for better performance
@@ -135,7 +137,6 @@ export async function seedCatalogItems(persona: Persona): Promise<void> {
   const catalogCol = db.get(TABLES.CATALOG_ITEMS);
 
   const existing = await catalogCol.query().fetch();
-  if (existing.length > 0) return; // Already seeded
 
   const items = [
     { id: 'cabbage', display_name: 'Cabbage', sort_order: 1 },
@@ -145,10 +146,14 @@ export async function seedCatalogItems(persona: Persona): Promise<void> {
     { id: 'rock_salt', display_name: 'Rock Salt', sort_order: 5 },
     { id: 'flour', display_name: 'Flour', sort_order: 6 },
     { id: 'bicarbonate_of_soda', display_name: 'Bicarbonate of Soda', sort_order: 7 },
+    { id: 'grape_soda', display_name: 'Grape Soda (Small Bottle)', sort_order: 8 },
   ];
+  const existingIds = new Set(existing.map((record) => record.id));
+  const missingItems = items.filter((item) => !existingIds.has(item.id));
+  if (missingItems.length === 0) return;
 
   await db.write(async () => {
-    for (const item of items) {
+    for (const item of missingItems) {
       await catalogCol.create((record) => {
         record._raw.id = item.id;
         record.displayName = item.display_name;

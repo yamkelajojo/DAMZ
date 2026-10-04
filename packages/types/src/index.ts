@@ -95,11 +95,12 @@ export const CatalogItemIdSchema = z.enum([
   'rock_salt',
   'flour',
   'bicarbonate_of_soda',
+  'grape_soda',
 ]);
 export type CatalogItemId = z.infer<typeof CatalogItemIdSchema>;
 
 export const PaymentProviderSchema = z.enum(['mock', 'moneropay', 'acceptxmr']);
-export type PaymentProvider = z.infer<typeof PaymentProviderSchema>;
+export type PaymentProviderKind = z.infer<typeof PaymentProviderSchema>;
 
 export const SyncSourceSchema = z.enum(['strikes', 'settings', 'directory', 'disputes']);
 export type SyncSource = z.infer<typeof SyncSourceSchema>;
@@ -307,6 +308,84 @@ export const SyncStateSchema = z.object({
   last_error: z.string().optional(),
 });
 export type SyncState = z.infer<typeof SyncStateSchema>;
+
+// Converter tables (ADR-0014)
+export const SwapDirectionSchema = z.enum([
+  'btc_to_xmr',
+  'xmr_to_btc',
+  'zar_to_xmr',
+  'xmr_to_zar',
+]);
+export type SwapDirection = z.infer<typeof SwapDirectionSchema>;
+
+export const SwapStatusSchema = z.enum([
+  'pending',
+  'deposit_waiting',
+  'executing',
+  'completed',
+  'refunded',
+  'failed',
+  'expired',
+]);
+export type SwapStatus = z.infer<typeof SwapStatusSchema>;
+
+export const SwapSchema = z.object({
+  id: UUIDSchema,
+  persona: z.enum(['customer', 'runner']),
+  direction: SwapDirectionSchema,
+  status: SwapStatusSchema.default('pending'),
+  btc_amount_sat: z.number().int().optional(),
+  btc_address: z.string().optional(),
+  btc_txid: z.string().optional(),
+  btc_refund_txid: z.string().optional(),
+  xmr_amount_pico: z.number().int().optional(),
+  xmr_subaddress: MoneroSubaddressSchema.optional(),
+  xmr_txid: MoneroTxidSchema.optional(),
+  zar_amount_cents: z.number().int().optional(),
+  zar_reference: z.string().optional(),
+  created_at: TimestampSchema,
+  expires_at: TimestampSchema.optional(),
+  completed_at: TimestampSchema.optional(),
+  network_fee_btc: z.number().int().optional(),
+  network_fee_xmr: z.number().int().optional(),
+  service_fee_zar: z.number().int().optional(),
+});
+export type Swap = z.infer<typeof SwapSchema>;
+
+export const ExchangeOfferSourceSchema = z.enum(['xmrbazaar', 'haveno']);
+export const ExchangeOfferDirectionSchema = z.enum(['zar_to_xmr', 'xmr_to_zar']);
+export const ExchangeOfferSchema = z.object({
+  id: z.string(),
+  source: ExchangeOfferSourceSchema,
+  direction: ExchangeOfferDirectionSchema,
+  price_zar_per_xmr: z.string(),
+  min_amount: z.string(),
+  max_amount: z.string(),
+  payment_method: z.string().optional(),
+  trader_rating: z.number().optional(),
+  fetched_at: TimestampSchema,
+  expires_at: TimestampSchema.optional(),
+});
+export type ExchangeOffer = z.infer<typeof ExchangeOfferSchema>;
+
+export const SwapEventKindSchema = z.enum([
+  'created',
+  'deposit_seen',
+  'htlc_locked',
+  'executing',
+  'completed',
+  'refunded',
+  'failed',
+  'expired',
+]);
+export const SwapEventSchema = z.object({
+  id: z.string(),
+  swap_id: UUIDSchema,
+  kind: SwapEventKindSchema,
+  observed_at: TimestampSchema,
+  detail: z.string().optional(),
+});
+export type SwapEvent = z.infer<typeof SwapEventSchema>;
 
 // ============================================================================
 // API TYPES

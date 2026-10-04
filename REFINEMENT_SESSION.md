@@ -683,3 +683,123 @@ decision remains unchanged.
 catalog and prefill semantics. Pending catalog/price-list acceptance cases are recorded in
 the test plan; no runtime tests, code changes, builds, or installations were made. No
 unresolved question is left without an owner and target phase; no TODOs are introduced.
+
+---
+
+## Post-refinement addendum — schema v1-to-v2 migration resolution (OQ-SCHEMA-001)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted; path selected by the user before schema implementation.
+
+### Contradiction found
+
+`packages/db/MIGRATION_STRATEGY.md` already assigns WatermelonDB schema version 2 / migration
+0002 to the Grape Soda catalog backfill. ADR-0043 separately left the migration path for
+`swaps`, `exchange_offers`, and `swap_events` unresolved. Reusing version 2 for converter
+tables without updating the existing migration decision would create an ambiguous upgrade
+sequence.
+
+### Resolution
+
+The user selected one additive v1-to-v2 upgrade path. Schema version 2 will create exactly
+the three already-approved converter tables using WatermelonDB `schemaMigrations` and
+`createTable` steps; the post-open catalog initializer will idempotently insert the missing
+Grape Soda reference in both fresh and partially seeded databases. These operations preserve
+existing v1 rows and do not drop/recreate the client database. The DB package version moves
+from 1.0.0 to 1.1.0 under the existing additive-minor rule. Admin remains a separate service
+schema and is not counted among the 19 client tables.
+
+The single-migration choice is recorded in ADR-0043 and `packages/db/MIGRATION_STRATEGY.md`
+before implementation. A v1 SQLCipher database upgrade test is still required at the Phase 1
+release gate. If a conflicting version-2 migration has already shipped to supported devices,
+stop before release and reassess the sequence. OQ-SCHEMA-001 is closed; OQ-SCHEMA-002 (schema
+validator implementation) remains owned by Admin/Developer and targeted before the Phase 1
+schema-validation gate.
+
+### Alternatives considered
+
+- Keep v2 exclusively for Grape Soda and put converter tables in v3 — rejected by the user's
+  selection to combine the existing catalog upgrade and approved converter-table alignment
+  in one additive v2 migration.
+- Drop/recreate the database to reach 19 tables — rejected because it would destroy offline
+  user data and violate the approved additive migration strategy.
+
+### Consequences
+
+The acceptance suite must verify migration registration, exact new table names, and catalog
+repair without duplicates. That unit coverage does not replace the required native upgrade
+exercise against a real v1 SQLCipher database. No Admin table, twentieth client table, or
+central user database is introduced.
+
+---
+
+## Production-remediation validation addendum — WatermelonDB API and SQLCipher boundary
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Partial implementation; release blocked pending confirmation of the native storage
+and wallet-security boundaries.
+
+### Supersession and scope
+
+The user's explicit instruction to continue production remediation superseded the earlier
+test-only restriction. The approved eight-item catalog, editable R15/R20 prefill semantics,
+19-client-table inventory, separate Admin schema, and single additive v1-to-v2 migration
+remain unchanged. This addendum records implementation and verification facts; it does not
+select a replacement database adapter or change wallet architecture.
+
+### WatermelonDB API finding and correction
+
+Type-checking against the declared `@nozbe/watermelondb@0.27.0` package showed that
+`appSchema` expects `tableSchema()`-normalized table definitions and returns `tables` as a
+name-keyed map, while migration `createTable()` accepts a raw table specification. The schema
+now exports shared raw `TABLE_SCHEMA_SPECS`, maps those through `tableSchema()` for
+`appSchema`, and builds the v2 migration from the raw specs. Jest mocks were updated to model
+that normalization and keyed-map result rather than treating `appSchema` as identity. This
+preserves all 19 client tables and creates only the three approved converter tables.
+
+### Blocking contradictions
+
+The client database is required to be encrypted locally, but current `packages/db/src/index.ts`
+imports WatermelonDB's standard `SQLiteAdapter`, passes it `cipherKey`, and later calls
+`unsafeSqlQuery()` and `close()`. Against the installed 0.27.0 public types, `cipherKey` and
+those adapter methods are not present. `packages/db/package.json` declares
+`@nozbe/watermelondbcipher@^0.27.0`; a public npm registry lookup returned HTTP 404 in this
+environment, and the source does not import that declared package. The native SQLCipher
+adapter therefore has not been established by this checkout or verified by the unit tests.
+This is a security and release blocker, not a type assertion to silence. OQ-SCHEMA-003 in
+ADR-0043 assigns confirmation of the canonical adapter package, import, version, and API to
+Admin/Developer before the Phase 1 SQLCipher upgrade/release gate. Any replacement design
+requires a separate ADR and user confirmation.
+
+The TypeScript check also reports existing WatermelonDB API mismatches (`actionsEnabled`,
+query callback shape, adapter raw-SQL/close methods, and generic catalog model fields), plus
+`ImportMeta.dir` in the Bun validator script. The schema and migration API errors identified
+above were corrected; these remaining diagnostics are not represented as passing.
+Separately, the Core wallet security test still observes a `seed` property from the JavaScript
+facade, contrary to the native-only secret-memory boundary. No JS-only deletion/hiding change
+was made, because that would not prevent seed material crossing into JS. Native implementation
+work remains blocked until its execution boundary can be established without weakening the
+security contract.
+
+### Verification results
+
+- Types Jest: 27 passed; Types TypeScript check: passed.
+- DB Jest: 18 passed after the WatermelonDB schema/migration mock correction.
+- DB TypeScript check against WatermelonDB 0.27.0: failed with 12 remaining diagnostics,
+  including the adapter, database API, Bun validator, and catalog model issues listed above.
+- Core wallet security Jest: 1 passed, 1 failed because the JS-facing result contains `seed`.
+- No real v1 SQLCipher database/device upgrade test was run; it remains a release gate.
+- No test was weakened, no SQLCipher behavior was claimed as verified, and no secret was
+  hidden solely to make a JS test pass.
+
+### Decision posture and next action
+
+The selected combined v1-to-v2 migration remains the only authorized schema path. Unit
+coverage confirms the declared 19-table inventory, additive migration registration, and
+idempotent Grape Soda repair, but does not establish native encryption, device migration, or
+the wallet memory boundary. Stop further production changes that depend on those boundaries
+until the user confirms the canonical SQLCipher adapter source/version/API and authorizes the
+next native-security implementation step. No Admin table, twentieth client table, central user
+database, or architecture change is introduced.

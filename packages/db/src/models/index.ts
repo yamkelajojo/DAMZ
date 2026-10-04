@@ -85,6 +85,58 @@ export class RunnerPrice extends Model {
   @field('available') available!: boolean;
 }
 
+export class Swap extends Model {
+  static table = 'swaps';
+  static associations: Associations = {
+    events: { type: 'has_many', foreignKey: 'swap_id' },
+  };
+
+  @text('persona') persona!: string;
+  @text('direction') direction!: string;
+  @text('status') status!: string;
+  @field('btc_amount_sat') btcAmountSat!: number | undefined;
+  @text('btc_address') btcAddress!: string | undefined;
+  @text('btc_txid') btcTxid!: string | undefined;
+  @text('btc_refund_txid') btcRefundTxid!: string | undefined;
+  @field('xmr_amount_pico') xmrAmountPico!: number | undefined;
+  @text('xmr_subaddress') xmrSubaddress!: string | undefined;
+  @text('xmr_txid') xmrTxid!: string | undefined;
+  @field('zar_amount_cents') zarAmountCents!: number | undefined;
+  @text('zar_reference') zarReference!: string | undefined;
+  @field('created_at') createdAt!: number;
+  @field('expires_at') expiresAt!: number | undefined;
+  @field('completed_at') completedAt!: number | undefined;
+  @field('network_fee_btc') networkFeeBtc!: number | undefined;
+  @field('network_fee_xmr') networkFeeXmr!: number | undefined;
+  @field('service_fee_zar') serviceFeeZar!: number | undefined;
+}
+
+export class ExchangeOffer extends Model {
+  static table = 'exchange_offers';
+
+  @text('source') source!: string;
+  @text('direction') direction!: string;
+  @text('price_zar_per_xmr') priceZarPerXmr!: string;
+  @text('min_amount') minAmount!: string;
+  @text('max_amount') maxAmount!: string;
+  @text('payment_method') paymentMethod!: string | undefined;
+  @field('trader_rating') traderRating!: number | undefined;
+  @field('fetched_at') fetchedAt!: number;
+  @field('expires_at') expiresAt!: number | undefined;
+}
+
+export class SwapEvent extends Model {
+  static table = 'swap_events';
+  static associations: Associations = {
+    swap: { type: 'belongs_to', key: 'swap_id' },
+  };
+
+  @text('swap_id') swapId!: string;
+  @text('kind') kind!: string;
+  @field('observed_at') observedAt!: number;
+  @text('detail') detail!: string | undefined;
+}
+
 export class Order extends Model {
   static table = 'orders';
   static associations: Associations = {
@@ -262,6 +314,9 @@ export const MODELS = [
   CatalogItem,
   PriceList,
   RunnerPrice,
+  Swap,
+  ExchangeOffer,
+  SwapEvent,
   Order,
   OrderItem,
   PaymentEvent,
@@ -279,3 +334,5 @@ export const CUSTOMER_MODELS = MODELS; // Customer app gets all tables
 
 // Runner app excludes strikes table
 export const RUNNER_MODELS = MODELS.filter(m => m.table !== 'strikes');
+
+export { TABLES } from '../schemas/schema';

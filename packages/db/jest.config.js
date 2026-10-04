@@ -1,10 +1,8 @@
 module.exports = {
-  preset: 'jest-expo',
-  testEnvironment: 'jsdom',
-  setupFilesAfterFrame: ['<rootDir>/jest.setup.js'],
-  testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
-  transformIgnorePatterns: [
-    'node_modules/(?!(react-native|expo|@expo|@react-native|@react-navigation|expo-modules-core|@nozbe\/watermelondb|@nozbe\/watermelondbcipher)/)',
+  testEnvironment: 'node',
+  testMatch: [
+    '<rootDir>/src/**/__tests__/**/*.test.ts',
+    '<rootDir>/src/**/__tests__/**/*.test.tsx',
   ],
   moduleNameMapper: {
     '^@damz/ui$': '<rootDir>/../ui/src',
@@ -16,4 +14,21 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/__tests__/**',
   ],
+  transform: {
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        diagnostics: false,
+        tsconfig: {
+          target: 'ES2022',
+          module: 'CommonJS',
+          moduleResolution: 'Node',
+          esModuleInterop: true,
+          experimentalDecorators: true,
+          strict: true,
+        },
+      },
+    ],
+  },
+  clearMocks: true,
 };

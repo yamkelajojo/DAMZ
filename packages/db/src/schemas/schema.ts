@@ -5,11 +5,9 @@
  * Single schema package, role-scoped writes.
  */
 
-import { Schema } from '@nozbe/watermelondb';
+import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
-export const schema = Schema({
-  version: 1,
-  tables: [
+export const TABLE_SCHEMA_SPECS = [
     // Identity (one row per device - this device's own persona)
     {
       name: 'identity',
@@ -40,7 +38,7 @@ export const schema = Schema({
       ],
     },
 
-    // Catalog Items (fixed 7, seeded at install, read-only)
+    // Catalog Items (fixed 8, seeded at install, read-only)
     {
       name: 'catalog_items',
       columns: [
@@ -70,6 +68,54 @@ export const schema = Schema({
         { name: 'item_id', type: 'string', isIndexed: true },
         { name: 'price_zar', type: 'string' },
         { name: 'available', type: 'number' }, // boolean as int
+      ],
+    },
+
+    // Converter (device-owned swaps and audit events; cached exchange offers)
+    {
+      name: 'swaps',
+      columns: [
+        { name: 'persona', type: 'string' },
+        { name: 'direction', type: 'string' },
+        { name: 'status', type: 'string' },
+        { name: 'btc_amount_sat', type: 'number', isOptional: true },
+        { name: 'btc_address', type: 'string', isOptional: true },
+        { name: 'btc_txid', type: 'string', isOptional: true },
+        { name: 'btc_refund_txid', type: 'string', isOptional: true },
+        { name: 'xmr_amount_pico', type: 'number', isOptional: true },
+        { name: 'xmr_subaddress', type: 'string', isOptional: true },
+        { name: 'xmr_txid', type: 'string', isOptional: true },
+        { name: 'zar_amount_cents', type: 'number', isOptional: true },
+        { name: 'zar_reference', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'expires_at', type: 'number', isOptional: true },
+        { name: 'completed_at', type: 'number', isOptional: true },
+        { name: 'network_fee_btc', type: 'number', isOptional: true },
+        { name: 'network_fee_xmr', type: 'number', isOptional: true },
+        { name: 'service_fee_zar', type: 'number', isOptional: true },
+      ],
+    },
+    {
+      name: 'exchange_offers',
+      columns: [
+        { name: 'source', type: 'string', isIndexed: true },
+        { name: 'direction', type: 'string' },
+        { name: 'price_zar_per_xmr', type: 'string' },
+        { name: 'min_amount', type: 'string' },
+        { name: 'max_amount', type: 'string' },
+        { name: 'payment_method', type: 'string', isOptional: true },
+        { name: 'trader_rating', type: 'number', isOptional: true },
+        { name: 'fetched_at', type: 'number' },
+        { name: 'expires_at', type: 'number', isOptional: true },
+      ],
+    },
+    {
+      name: 'swap_events',
+      columns: [
+        { name: 'swap_id', type: 'string', isIndexed: true },
+        { name: 'kind', type: 'string' },
+        { name: 'observed_at', type: 'number' },
+        { name: 'detail', type: 'string', isOptional: true },
       ],
     },
 
@@ -165,7 +211,7 @@ export const schema = Schema({
       ],
     },
 
-    // Wallet Metadata (Runner device only)
+    // Wallet Metadata (independent local wallet metadata in Customer and Runner apps)
     {
       name: 'wallet_metadata',
       columns: [
@@ -241,7 +287,11 @@ export const schema = Schema({
         { name: 'last_error', type: 'string', isOptional: true },
       ],
     },
-  ],
+] satisfies Parameters<typeof tableSchema>[0][];
+
+export const schema = appSchema({
+  version: 2,
+  tables: TABLE_SCHEMA_SPECS.map((table) => tableSchema(table)),
 });
 
 // Table names as constants for type safety
@@ -251,6 +301,9 @@ export const TABLES = {
   CATALOG_ITEMS: 'catalog_items',
   PRICE_LISTS: 'price_lists',
   RUNNER_PRICES: 'runner_prices',
+  SWAPS: 'swaps',
+  EXCHANGE_OFFERS: 'exchange_offers',
+  SWAP_EVENTS: 'swap_events',
   ORDERS: 'orders',
   ORDER_ITEMS: 'order_items',
   PAYMENT_EVENTS: 'payment_events',
@@ -285,6 +338,19 @@ export const COLUMNS = {
   ],
   [TABLES.RUNNER_PRICES]: [
     'id', 'price_list_id', 'item_id', 'price_zar', 'available'
+  ],
+  [TABLES.SWAPS]: [
+    'id', 'persona', 'direction', 'status', 'btc_amount_sat', 'btc_address',
+    'btc_txid', 'btc_refund_txid', 'xmr_amount_pico', 'xmr_subaddress',
+    'xmr_txid', 'zar_amount_cents', 'zar_reference', 'created_at',
+    'expires_at', 'completed_at', 'network_fee_btc', 'network_fee_xmr', 'service_fee_zar'
+  ],
+  [TABLES.EXCHANGE_OFFERS]: [
+    'id', 'source', 'direction', 'price_zar_per_xmr', 'min_amount', 'max_amount',
+    'payment_method', 'trader_rating', 'fetched_at', 'expires_at'
+  ],
+  [TABLES.SWAP_EVENTS]: [
+    'id', 'swap_id', 'kind', 'observed_at', 'detail'
   ],
   [TABLES.ORDERS]: [
     'id', 'customer_did', 'runner_did', 'status', 'dispute_state',

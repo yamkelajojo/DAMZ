@@ -29,50 +29,42 @@
 ## 2. WatermelonDB Migrations (Mobile Apps)
 
 ### 2.1 Migration Structure
-```typescript
-// packages/db/src/migrations/0001_initial.ts
-import { Migration } from '@nozbe/watermelondb';
+WatermelonDB migrations are registered with `schemaMigrations` and passed to the SQLite
+adapter. The adapter applies declared additive steps when opening a database created with an
+older schema version. Migration steps must preserve existing rows; production migrations do
+not drop or recreate the user's database.
 
-export default class InitialSchema extends Migration {
-  version = 1;
-  
-  async up(database) {
-    await database.adapter.execute(`
-      CREATE TABLE identity (...);
-      CREATE TABLE contacts (...);
-      -- all v1 tables
-    `);
-  }
-  
-  async down(database) {
-    // Not needed for production, but implement for completeness
-    await database.adapter.execute('DROP TABLE IF EXISTS ...');
-  }
-}
+```typescript
+// packages/db/src/migrations/index.ts
+import { schemaMigrations } from '@nozbe/watermelondb/Schema/migrations';
+
+export const migrations = schemaMigrations({ migrations: [] });
 ```
 
 ### 2.2 Additive Migration (MINOR version)
-```typescript
-// packages/db/src/migrations/0002_add_grape_soda.ts
-import { Migration } from '@nozbe/watermelondb';
+The approved v1-to-v2 upgrade combines the already documented Grape Soda catalog
+backfill with the three existing converter tables. `schema.ts` is the source of truth for
+new table definitions; the WatermelonDB migration creates those tables additively, and the
+post-open catalog initializer idempotently fills missing reference rows, including Grape
+Soda.
 
-export default class AddGrapeSoda extends Migration {
-  version = 2;
-  
-  async up(database) {
-    // Add new catalog item (data migration)
-    await database.adapter.execute(`
-      INSERT INTO catalog_items (id, display_name, sort_order)
-      VALUES ('grape_soda', 'Grape Soda (Small Bottle)', 8);
-    `);
-  }
-}
+```typescript
+// packages/db/src/migrations/index.ts
+import { createTable, schemaMigrations } from '@nozbe/watermelondb/Schema/migrations';
+import { TABLE_SCHEMA_SPECS } from '../schemas/schema';
+
+const v2TableNames = new Set(['swaps', 'exchange_offers', 'swap_events']);
+const v2Tables = TABLE_SCHEMA_SPECS.filter((table) => v2TableNames.has(table.name));
+
+export const migrations = schemaMigrations({
+  migrations: [{ toVersion: 2, steps: v2Tables.map((table) => createTable(table)) }],
+});
 ```
 
-This migration adds the eighth catalog reference only; it does not create a Runner price or
-a delivery-fee value. The Runner editor's R15.00 Grape Soda and R20.00 delivery-fee
-prefills are editable UI suggestions under ADR-0004/C20, not database defaults or minimums.
-No schema or data migration is needed for those suggestions.
+The catalog backfill adds only the eighth reference item. It creates no Runner price or
+delivery-fee value. The Runner editor's R15.00 Grape Soda and R20.00 delivery-fee prefills
+are editable UI suggestions under ADR-0004/C20, not database defaults or minimums. No
+schema or data migration is needed for those suggestions.
 
 ### 2.3 Breaking Migration (MAJOR version)
 - Requires full app reinstall (user wipes data)
@@ -82,30 +74,18 @@ No schema or data migration is needed for those suggestions.
 ### 2.4 Migration Registration
 ```typescript
 // packages/db/src/index.ts
-import { Database } from '@nozbe/watermelondb';
-import InitialSchema from './migrations/0001_initial';
-import AddGrapeSoda from './migrations/0002_add_grape_soda';
+import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
+import { migrations } from './migrations';
+import { schema } from './schemas/schema';
 
-export const migrations = {
-  1: InitialSchema,
-  2: AddGrapeSoda,
-  // ...
-};
-
-export const schema = appSchema({ tables, migrations });
+const adapter = new SQLiteAdapter({ schema, migrations, dbName: 'damz.db' });
 ```
 
 ### 2.5 On-Device Migration Execution
-```typescript
-// App startup (App.tsx)
-import { migrate } from '@nozbe/watermelondb/Migration';
-
-await migrate({
-  database,
-  migrations,
-  toVersion: LATEST_SCHEMA_VERSION, // from packages/db package.json
-});
-```
+WatermelonDB applies the registered migration steps as part of adapter setup when the
+existing database version is older than the declared schema. After the adapter opens, the
+normal idempotent catalog initializer fills missing reference items. No `unsafeResetDatabase`
+or destructive fallback is allowed for this additive upgrade.
 
 ---
 
