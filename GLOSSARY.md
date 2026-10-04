@@ -82,8 +82,10 @@ Admin review a dispute; a coarse-geohash fallback is never represented as ZK pro
 _Avoid_: receipt, evidence, delivery proof
 
 **Price list**:
-The set of item prices and availability a Runner publishes under their DID. The Customer
-caches it, and an Order freezes the prices it was placed against so its total never moves.
+The DID-signed item prices, availability, and optional delivery-fee amount the Runner
+chooses and publishes. The editor may prefill R15.00 for Grape Soda (Small Bottle) and R20.00 for the
+delivery fee as editable suggestions only, not price floors. The Customer caches the signed
+list, and an Order freezes the values used at placement (ADR-0004/C20).
 _Avoid_: menu, catalogue, rate card
 
 **Payment provider**:

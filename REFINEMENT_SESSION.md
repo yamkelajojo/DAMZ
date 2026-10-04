@@ -473,6 +473,7 @@ ADR-0001, ADR-0007, and ADR-0041 are explicitly narrowed by ADR-0029 only to per
 | Q23 | Customer and Runner each have an independent local Monero wallet | ✅ ADR-0028 |
 | Q24 | Remote wipe is app-data/key erasure on verified managed Android only; no full-device reset, iOS, or unmanaged Android | ✅ ADR-0029 |
 | Q25 | Mopro/GPU is an additional ZK prover; retain Zakura/CPU fallback | ✅ ADR-0030 |
+| Q26 | Current catalog is eight items; R15/R20 are editable prefill suggestions, not floors | ✅ C20 / ADR-0004 clarification |
 
 ## ADRs created
 
@@ -616,3 +617,69 @@ are introduced.
 
 - Mopro mobile toolkit and GPU overview: https://zkmopro.org/docs/intro/
 - Mopro circuit-specific performance guidance: https://zkmopro.org/docs/performance/
+
+---
+
+## Post-refinement addendum — fixed catalog count and price-editor suggestions (C20 / ADR-0004)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted documentation clarification; implementation deferred to the existing price-list phase.
+
+### C20 — Seven/eight-item count and prefill-versus-minimum ambiguity
+
+**Observed state**:
+
+- The original Q1 and derived Q14 notes call the catalog seven items, while the Q1 text
+  enumerates eight. `DB_LAYOUT_AND_ARCH.md` also had a current-state summary and Customer
+  Item Selection screen that said seven, despite its schema defining eight catalog rows.
+- `packages/db/MIGRATION_STRATEGY.md` records migration 0002 adding `Grape Soda (Small
+  Bottle)` at sort order 8, and current `SPEC.md` / Runner Price List Editor already present
+  an eight-item catalog. The active documentation therefore disagreed about the count.
+- ADR-0004 defines Runner-signed lists and order snapshots, but did not say whether the
+  R15 Grape Soda and R20 delivery-fee values are mandatory prices or editor suggestions.
+  Without clarification, those values could be read as price floors or platform-set rates.
+- The user clarified that both amounts are editable prefill suggestions, not enforced
+  prices or minimums.
+
+**Resolution**:
+
+The active catalog remains the fixed eight-item app-bundle reference catalog: Cabbage,
+Spinach, Cinnamon, Cauliflower, Rock Salt, Flour, Bicarbonate of Soda, and Grape Soda
+(Small Bottle). Grape Soda is the eighth item already introduced by migration 0002; the
+original seven-item count in Q1/Q14 remains historical and is not the current catalog
+count. Runner-owned prices remain separate in `runner_prices` and signed price-list data.
+
+The Runner's price-list editor prefills **R15.00** for Grape Soda (Small Bottle) and
+**R20.00** for the delivery-fee field. Both are editable suggestions, not fixed, required,
+or minimum amounts. A Runner may choose a lower or higher valid value before signing and
+publishing. Ordinary amount-format/validity checks remain, but neither suggestion is a
+price floor. Only the values actually present in the Runner's signed list are cached by the
+Customer and frozen into orders; when set, the fee is carried in
+`price_lists.delivery_fee_zar` and snapshotted in `orders.delivery_fee_zar`, and later list
+edits do not rewrite existing orders.
+
+The suggestions are UI-only. They do not seed a price in `catalog_items`, add a database
+default, create a schema constraint/table, or grant Admin control over Runner pricing. The
+existing 19-client-table inventory and separate Admin schema are unchanged. ADR-0004 now
+records this clarification; no new ADR number is used because the signed-list and snapshot
+decision remains unchanged.
+
+**Alternatives considered**:
+
+- Restore a seven-item current catalog or remove Grape Soda — rejected because the existing
+  catalog schema and migration 0002 already establish the eighth item.
+- Treat R15/R20 as mandatory prices or minimum floors — rejected by the user's explicit
+  correction; the Runner owns and signs the final values.
+- Store the suggestions as catalog prices or Admin-wide defaults, or add a price-floor
+  column/table — rejected; the suggestions are editor-only and per-Runner actual values
+  remain in the existing signed price list.
+
+**Consequences and follow-up**:
+
+`DB_LAYOUT_AND_ARCH.md`, `SPEC.md`, `ROADMAP.md`, `docs/adr/0004-published-prices.md`,
+`packages/db/MIGRATION_STRATEGY.md`, `packages/db/OWNERSHIP_CONTRACT.md`,
+`DB_ARC_and_TEST_PLANNING.md`, `CONTEXT.md`, and `GLOSSARY.md` now state the same eight-item
+catalog and prefill semantics. Pending catalog/price-list acceptance cases are recorded in
+the test plan; no runtime tests, code changes, builds, or installations were made. No
+unresolved question is left without an owner and target phase; no TODOs are introduced.

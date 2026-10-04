@@ -13,6 +13,11 @@ This document defines the **enforceable ownership contract** for the DAMZ databa
 
 **Core Principle**: Every column has exactly one writer. All other devices/services are read-only mirrors.
 
+The Runner editor's R15.00 Grape Soda and R20.00 delivery-fee prefills are UI suggestions
+only (ADR-0004/C20), not minimums or stored defaults. The Runner owns and signs the actual
+values written to `runner_prices` and `price_lists`; Customer copies remain read-only, and
+a placed order uses its frozen snapshot. This does not change table ownership or schema.
+
 This contract covers the **19 client-side WatermelonDB tables**. The Rust Admin service
 uses a separate server-side schema and API contract (ADR-0007, ADR-0029, ADR-0043); its
 Admin-only `wipe_pending` control table is not part of this contract or either app's local

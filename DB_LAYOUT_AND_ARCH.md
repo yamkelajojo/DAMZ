@@ -22,7 +22,7 @@ the two hardest ones are ADR-0003 and ADR-0004.
 | 4 | Strikes local on the device, admin issues them | Strikes **server-authoritative**, device keeps a read-only mirror | Q7, Q11 |
 | 5 | Proof key = HKDF from an undefined `masterKey` | **Random key per order**, sent over the order chat | Q12, ADR-0003 |
 | 6 | Prices unmodelled (customer pays a total from nowhere) | Runner **publishes a signed price list**; the order freezes a snapshot | Q14, ADR-0004 |
-| 7 | Catalog = 7 rows *with prices*, owned by the runner | `catalog_items` (fixed 7, read-only) + `price_lists` / `runner_prices` | Q14 |
+| 7 | Catalog = 7 rows *with prices*, owned by the runner | `catalog_items` (fixed 8, read-only; Grape Soda added by migration 0002) + Runner-owned `price_lists` / `runner_prices`; prefill values are editable suggestions only | Q14, migration strategy §2.2, ADR-0004/C20 |
 | 8 | Messages store the Signal envelope; 90-day retention | Messages store the **decrypted body**; envelope only until sent; **30 days** | Q15, Q9 |
 | 9 | Purge ran `unsafeResetDatabase()`, commented "VACUUM" | Purge is a real `DELETE` + `VACUUM`; that call would have **wiped the database** | Q9 |
 | 10 | Delivery address columns on both orders tables | **No address column** — the address exists only in the order chat | Q6, Q20 |
@@ -111,8 +111,9 @@ CREATE TABLE catalog_items (
 
 ### The published price list
 
-A Runner publishes a DID-signed price list; a Customer caches other Runners' lists. Same
-tables, different writers — which is what makes ordering possible offline, from cache.
+A Runner publishes a DID-signed price list containing per-item prices, availability, and
+an optional delivery-fee amount; a Customer caches other Runners' lists. Same tables,
+different writers — which is what makes ordering possible offline, from cache.
 
 ```sql
 -- One row per published version of a Runner's list.
@@ -140,6 +141,21 @@ CREATE TABLE runner_prices (
 
 The signature is what stops a relay or an impostor substituting its own price list. An
 order never reads live prices — it freezes them (§3, `order_items`).
+
+#### Runner price-editor suggestions — ADR-0004 clarification
+
+The Runner's price-list editor prefills the Grape Soda (Small Bottle) item at **R15.00**
+and the delivery-fee field at **R20.00**. These are editable suggestions only, not fixed
+prices, required amounts, or minimums. The Runner may change either value to a lower or
+higher valid amount before signing and publishing the list; neither value creates a price
+floor. Only the values the Runner chooses and signs are published and cached. A Customer's
+order snapshots those published values, and later Runner edits do not change an existing
+order (ADR-0004).
+
+These suggestions are editor behavior, not values seeded into `catalog_items`, schema
+constraints, Admin pricing rules, or a database migration. The current catalog remains
+fixed at eight items, including Grape Soda; its item reference is separate from each
+Runner's price.
 
 ---
 
@@ -234,8 +250,8 @@ CREATE TABLE orders (
     CHECK (dispute_state IN ('none','open','resolved','dismissed')),
 
   -- ── money  (✍️ Customer; 👁️ read-only on the Runner device) ─────────
-  total_zar         TEXT NOT NULL,           -- frozen from the price snapshot
-  delivery_fee_zar  TEXT,
+  total_zar         TEXT NOT NULL,           -- frozen from item-price + delivery-fee snapshots
+  delivery_fee_zar  TEXT,                    -- delivery-fee snapshot from signed list at placement
   monero_subaddress TEXT,                    -- [v1: mock provider]
   payment_txid      TEXT,                    -- [v1: mock provider]
   paid_at           INTEGER,
@@ -637,7 +653,9 @@ Recorded so nobody assumes these exist:
 
 ## 10. Data flow, end to end
 
-1. **Publish.** Runner sets prices and availability → signs → `price_lists` + `runner_prices`.
+1. **Publish.** Runner edits item prices, availability, and the optional delivery fee.
+   The R15.00 Grape Soda and R20.00 fee prefills are suggestions only; the Runner signs the
+   chosen values into `price_lists` + `runner_prices`.
 2. **Discover.** Customer syncs `runner_directory`, fetches and caches a Runner's list.
 3. **Order.** Customer writes `orders` (`pending_payment`) + `order_items` snapshots, sends
    the order and the address over the chat.
@@ -706,9 +724,9 @@ the grilling and follow-up documentation sessions:
 1. **Onboarding** — Generate DID and local Monero wallet; display and back up the complete 25-word mnemonic in native UI; set pseudonym and permissions
 2. **Home/Discover** — Nearby runners (runner_directory), filter by radius, availability + fee
 3. **Runner Profile** — Cached price list, items, delivery radius
-4. **Item Selection** — 7 catalog items, runner prices, quantity, running total
+4. **Item Selection** — 8 fixed catalog items, Runner-published prices, quantity, running total
 5. **Address Entry** — Geocoded to geohash, saved addresses, map picker
-6. **Order Review** — Items, prices, delivery fee, total ZAR, est. XMR, 15-min expiry
+6. **Order Review** — Items, actual prices and fee from the Runner's signed list (not editor suggestions), total ZAR, est. XMR, 15-min expiry
 7. **Payment** — Send XMR from the Customer's local native wallet to the Runner's Monero subaddress; QR, countdown, status polling
 8. **Order Tracking** — Status timeline, runner coarse geohash, chat button
 9. **Order Chat** — Signal Protocol E2EE, text, photos, proof key
@@ -721,7 +739,7 @@ the grilling and follow-up documentation sessions:
 ### Runner App (13 Screens + Converter Tab)
 1. **Onboarding** — DID + onion, claim pre-created registry (ADR-0015)
 2. **Dashboard** — Active orders, earnings, availability toggle
-3. **Price List Editor** — 8 items, prices, availability, delivery fee, sign & publish
+3. **Price List Editor** — 8 items, editable prices/availability; R15.00 Grape Soda and R20.00 delivery-fee prefills are suggestions only; sign & publish chosen values
 4. **Order Requests** — Incoming with countdown
 5. **Order Detail** — Items, address, chat
 6. **Accept/Reject** — Cannot cancel after accept

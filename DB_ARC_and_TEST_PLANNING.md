@@ -707,6 +707,32 @@ is unavailable, the existing `@ajna-inc/poe-proofs` CPU prover remains the inter
 Admin/Developer and must be resolved at the Phase 6 gate. If circuit compatibility or privacy
 requirements cannot be demonstrated, Mopro/GPU remains disabled and the CPU path continues.
 
+### 2.6.5 Fixed Catalog and Editable Price-Prefill Gate (ADR-0004/C20)
+
+These are planned acceptance cases; no runtime tests are run as part of this documentation
+directive.
+
+- **Catalog inventory — TC-CAT-01**: both apps expose the same fixed eight catalog items,
+  including `Grape Soda (Small Bottle)`, exactly once. Confirm Grape Soda's catalog
+  migration adds only the reference item; it does not create a price or delivery-fee row.
+  The client schema remains at 19 tables.
+- **Prefill and editability — TC-PRICE-PREFILL-01**: the Runner's editor initially suggests
+  **R15.00** for Grape Soda and **R20.00** for the delivery-fee field. Verify the Runner can
+  edit each value both below and above the suggestion (for example, R14.00 and R19.00) and
+  is not rejected solely for being below it. Existing money-format/validity checks still
+  apply; the suggestions themselves impose no floor or required amount.
+- **Signed values — TC-PRICE-PREFILL-02**: publish valid amounts below the suggestions
+  (for example, R14.00 for Grape Soda and R19.00 for the delivery fee), then confirm those
+  exact chosen values are included in the DID-signed list and the Customer cache receives
+  and verifies them. Also verify a higher value can be published; unedited suggestions are
+  not published independently.
+- **Order snapshot — TC-PRICE-PREFILL-03**: place an order from the cached signed list and
+  verify `order_items`, `orders.delivery_fee_zar`, and `orders.total_zar` preserve the values
+  actually agreed at placement. Later changes to a Runner's list must not rewrite that order
+  (ADR-0004).
+- **No schema floors — TC-PRICE-PREFILL-04**: confirm neither the R15/R20 suggestions nor
+  any price-floor/default column, extra client table, or Admin price control is introduced.
+
 ### 2.7 Requirements Traceability Matrix (Sample)
 
 | Req ID | Requirement | Test Cases | Status |
@@ -718,6 +744,9 @@ requirements cannot be demonstrated, Mopro/GPU remains disabled and the CPU path
 | REQ-PROOF-01 | Photo must be hardware-signed | TC-PROOF-01 to TC-PROOF-04 | Pending |
 | REQ-PROOF-02 | Location proof must be ZK-verifiable by the existing verifier; coarse-geohash mode is explicitly non-ZK | TC-PROOF-05 to TC-PROOF-08; TC-ZK-BE-01 | Pending |
 | REQ-PROOF-03 | Optional Mopro/GPU and CPU backends preserve one proof contract and fallback safely to Zakura/CPU, lower-precision CPU, then coarse geohash (ADR-0030) | TC-ZK-BE-01 to TC-ZK-BE-05 | Pending |
+| REQ-CAT-01 | Both apps use the same fixed eight-item catalog, including Grape Soda; no price is stored in the catalog reference | TC-CAT-01 | Pending |
+| REQ-PRICE-01 | Runner-signed price lists are cached and the actual chosen values are frozen into each order snapshot (ADR-0004) | TC-PRICE-PREFILL-02 to TC-PRICE-PREFILL-03 | Pending |
+| REQ-PRICE-02 | R15.00 Grape Soda and R20.00 delivery fee are editable prefill suggestions, not required prices or minimums | TC-PRICE-PREFILL-01 to TC-PRICE-PREFILL-04 | Pending |
 | REQ-DB-01 | All local data encrypted with SQLCipher | TC-DB-01 to TC-DB-05 | Pending |
 | REQ-DB-02 | Monero wallet secrets never stored in SQLCipher DB | TC-DB-06 | Pending |
 | REQ-SEC-MEM-01 | Customer and Runner wallet secrets and the view-key PIN never cross the JavaScript/JSI boundary | TC-SEC-MEM-01 to TC-SEC-MEM-04 | Pending |

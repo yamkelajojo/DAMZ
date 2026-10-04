@@ -69,6 +69,11 @@ export default class AddGrapeSoda extends Migration {
 }
 ```
 
+This migration adds the eighth catalog reference only; it does not create a Runner price or
+a delivery-fee value. The Runner editor's R15.00 Grape Soda and R20.00 delivery-fee
+prefills are editable UI suggestions under ADR-0004/C20, not database defaults or minimums.
+No schema or data migration is needed for those suggestions.
+
 ### 2.3 Breaking Migration (MAJOR version)
 - Requires full app reinstall (user wipes data)
 - Document in `CHANGELOG.md` with migration guide

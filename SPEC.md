@@ -716,6 +716,15 @@ wallet or wallet secrets for either app.
 
 ### 9.1 Order Placement (Customer)
 
+**Catalog and price-list contract — ADR-0004/C20**: DAMZ's fixed catalog has eight items,
+including Grape Soda (Small Bottle). The Runner's price-list editor prefills that item at
+**R15.00** and the optional delivery-fee field at **R20.00** as editable suggestions.
+Neither is a fixed price, required value, or minimum; a Runner may choose a lower or higher
+valid amount.
+Only values the Runner chooses and signs are published. The Customer sees the signed list,
+and an order freezes the prices and fee it was placed against. The suggestions are UI-only,
+not catalog prices, database defaults, schema constraints, or Admin-set values.
+
 1. Customer opens app, selects items from the eight available (Cabbage, Spinach, Cinnamon, Cauliflower, Rock Salt, Flour, Bicarbonate of Soda, Grape Soda (Small Bottle)).
 2. Customer's app queries nearby runners via the relay (Tor onion service discovery). Runners advertise availability by publishing their onion service to a community-maintained IPNS record.
 3. Customer selects a runner and places an order. Order details (items, quantities, delivery address geohash) are encrypted with the runner's Signal Protocol public key.

@@ -314,19 +314,22 @@
 
 **Deliverables**:
 - Runner publishes price list (signed) → Customer caches
+- Price List Editor prefill suggestions: R15.00 for Grape Soda (Small Bottle), R20.00 for the delivery fee; editable by the Runner and never enforced as prices or minimums (ADR-0004/C20)
 - Customer Discover screen (2 of 13) — filter by radius, availability, fee
 - Runner Profile screen (3 of 13) — cached price list
 - Item Selection (4 of 13) — 8 items, prices, quantity, running total
 - Address Entry (5 of 13) — geocoder, map picker, saved addresses
-- Order Review (6 of 13) — items, prices, delivery fee, total ZAR, est. XMR
+- Order Review (6 of 13) — items, actual prices and fee from the Runner's signed list, total ZAR, est. XMR
 - Order placement → chat with address + order details
 
 **Dependencies**: Phase 2, 3, 5 (chat), 7 (price list schema)
 
 **Test Gate**:
 - [ ] Runner publishes price list → Customer caches offline
-- [ ] Customer places order → frozen price snapshot in `order_items`
-- [ ] Order total never changes after placement
+- [ ] Price editor prefills R15.00 for Grape Soda and R20.00 for delivery fee; Runner can publish lower or higher valid values and is not blocked solely for going below either suggestion (ADR-0004/C20)
+- [ ] Customer sees the values from the signed list; order uses the actual chosen item prices and delivery fee, not editor placeholders
+- [ ] Customer places order → item-price snapshot in `order_items` and delivery-fee snapshot in `orders.delivery_fee_zar`
+- [ ] Order total never changes after placement or later price-list edits
 - [ ] Radius filtering works (coarse geohash)
 - [ ] Multiple runners visible, selectable
 - [ ] Offline order placement from cache
