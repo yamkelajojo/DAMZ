@@ -1,6 +1,6 @@
 ﻿# DAMZ â€” Database Layout & Architecture (v2)
 
-**Status**: rewritten 2026-10-04 by the `grill-with-docs` refinement session.
+**Status**: Archived tracked snapshot; not authoritative. Use `DB_LAYOUT_AND_ARCH.md` and the current ADRs for decisions.
 **Supersedes**: v1 of this document, and Part I of `DB_ARC_and_TEST_PLANNING.md`.
 Part II (Testing Strategy) of that document is unaffected.
 **Authority**: every decision here is recorded with its rationale in `REFINEMENT_SESSION.md`;

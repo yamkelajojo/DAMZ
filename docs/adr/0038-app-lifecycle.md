@@ -26,7 +26,7 @@ Graceful fallbacks for all permission denied scenarios.
 | Camera | Delivery capture (Runner) / QR scan (Customer) | Runner: cannot fulfill orders. Customer: manual address entry |
 | Location | Delivery (Runner ZK) / Discover runners (Customer) | Manual address + geocoder |
 | Notifications | After onboarding | In-app badge only |
-| Biometric | Wallet setup (Runner) / First secure action | Biometric-only (recovery phrase fallback) |
+| Biometric | Wallet seed/spend-key setup (Customer and Runner) / first secure action | Biometric-only native access; native recovery-phrase fallback; optional view key may use PIN-derived HKDF per ADR-0028 |
 | Network | Immediate (Tor needs it) | N/A — required |
 
-**Biometric**: Biometric-only unlock (no PIN fallback). Recovery phrase is the only fallback.
+**Biometric**: Seed and spend-key access is biometric-only in both apps with no PIN fallback. An optional private view key may use PIN-derived HKDF protection inside native `SecureMemory` only (ADR-0028). Recovery phrase is the fallback for seed/spend-key access and is entered through native UI.

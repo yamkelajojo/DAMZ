@@ -302,6 +302,113 @@ introduced by this addendum.
 
 ---
 
+## Post-refinement addendum — native wallet memory and wallet scope (ADR-0028)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted documentation decision; implementation deferred to the Customer and Runner wallet phases.
+
+### C14 — Monero backup phrase length conflicts across approved documents
+
+**Observed state**:
+
+- ADR-0026 and `DB_LAYOUT_AND_ARCH.md` specified a 24-word seed phrase.
+- `DB_ARC_and_TEST_PLANNING.md` described the Monero seed as a 25-word mnemonic.
+- `MoneroWallet.ts` currently returns a mnemonic as a JavaScript string and accepts a seed string for restore. `DB_ARC_and_TEST_PLANNING.md` also allowed a private view key through JavaScript `expo-secure-store`; both flows conflict with the selected wallet-secret boundary.
+
+**Resolution**:
+
+The user selected the complete 25-word Monero mnemonic as the canonical backup/recovery artifact and native-only handling for all wallet secrets, including private spend/view keys. Seed and spend-key access is biometric-only with no PIN fallback; the user approved a narrow exception allowing a PIN-derived HKDF key for an optional private view key, with all derivation and secret handling native-only. ADR-0028 supersedes ADR-0026 for phrase length and this view-key exception; remaining Runner-specific duress PIN, subaddress-label, fee-preview, and no-cloud-backup decisions remain. Phrase generation, display, entry, and private-key operations remain native-only. No wallet secret is represented as a JavaScript string, JSI string, typed array, or other JavaScript-managed value; JavaScript receives only non-secret status and metadata.
+
+**Alternatives considered**:
+
+- Keep the 24-word app-specific phrase — rejected in favor of the complete 25-word Monero mnemonic selected by the user.
+- Permit JavaScript to handle the phrase only during backup or recovery — rejected because it breaks the wallet-secret invariant.
+- Permit the private view key through JavaScript secure-store calls because it is not the mnemonic — rejected; the user selected native-only handling for all wallet secrets.
+
+### C15 — Wallet placement and ownership conflict between Q22 and the app flows
+
+**Observed state**:
+
+- Refinement decision Q22 and the approved v2 layout placed `wallet_metadata` on the Runner device only.
+- `ROADMAP.md` Phase 2 assigned seed backup to the Customer app, and `SPEC.md` already depicted a Customer Monero wallet and Customer-to-Runner payment flow.
+- ADR-0038's biometric permission row named Runner wallet setup; the Customer onboarding gate also requires biometric-gated wallet access.
+- The 19-table client schema already contains `wallet_metadata`; Admin has a separate server schema.
+
+**Resolution**:
+
+The user chose to retain the Runner wallet and add an independent, device-local Customer wallet. Each app controls only its own wallet; both use biometric-gated native wallet access, and there is no shared or Admin-held wallet or central user database. ADR-0028 supersedes Q22's Runner-only placement. The existing `wallet_metadata` table is used in each app's own local database for non-secret metadata, so the client inventory remains exactly 19 tables and Admin remains separate. The Customer wallet is the payer wallet; the Runner wallet remains the receiving/payee wallet.
+
+**Alternatives considered**:
+
+- Keep the wallet Runner-only and remove Customer wallet flows — rejected by the user's decision to have a Customer wallet too.
+- Add a twentieth client table for the Customer wallet — rejected; the existing local `wallet_metadata` table is reused and the accepted 19-table inventory remains unchanged.
+- Store either wallet centrally — rejected because it would violate the v2 local-first/anonymity boundary.
+
+### Consequences and follow-up
+
+`docs/adr/0028-secure-memory-management.md` records both resolutions and their replacement contracts. `docs/adr/0026-wallet-ux.md` retains its historical 24-word decision with an explicit partial-supersession note; its remaining Runner UX decisions stay accepted. `DB_LAYOUT_AND_ARCH.md`, `packages/db/OWNERSHIP_CONTRACT.md`, `SPEC.md`, `THREAT-MODEL.md`, `DB_ARC_and_TEST_PLANNING.md`, `ROADMAP.md`, `ARCHITECTURE.md`, and ADR-0038's biometric scope are aligned to the two local wallets, the 25-word native-only phrase UI, and the native-only boundary for seeds and private wallet keys. The tracked `DB_LAYOUT_AND_ARCH.md.tmp` snapshot is explicitly marked non-authoritative so its older schema and wallet wording is not used as a current decision.
+
+`packages/core/src/monero/MoneroWallet.ts` remains an explicitly noncompliant scaffold: replacing its JavaScript seed-string API is deferred; no runtime implementation or tests are performed in this documentation directive. Open Questions OQ-SEC-MEM-001 and OQ-SEC-MEM-002 have owner Admin/Developer and must be resolved before Customer wallet onboarding in Phase 2 and Runner wallet onboarding in Phase 3. The corresponding test cases are specified as pending in `DB_ARC_and_TEST_PLANNING.md`. No unresolved question is left without an owner and target phase.
+
+---
+
+## Post-refinement addendum — gateway reference consistency (ADR-0009)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted clarification; ADR-0009 remains authoritative.
+
+### C16 — Monero gateway references conflict
+
+**Observed state**:
+
+- ADR-0009 and `SPEC.md` §5.2 select a custom Rust gateway using the AcceptXMR library and explicitly reject MoneroPay.
+- The architecture diagram, data-flow text, repository tree, and several roadmap/service references still named MoneroPay as the active gateway or fallback.
+
+**Resolution**:
+
+The user reaffirmed AcceptXMR as the canonical gateway. This does not change ADR-0009. Active architecture, data-flow, and service references are aligned to the custom Rust/AcceptXMR gateway. OQ-ROAD-002 is resolved: do not fall back to MoneroPay/Node.js; if AcceptXMR proves unusable, Admin/Developer must propose a Rust-compatible replacement through an ADR before Phase 9.
+
+**Alternatives considered**:
+
+- Use MoneroPay/Node.js as the active gateway or automatic fallback — rejected in favor of the existing ADR-0009 Rust decision and the user's confirmation.
+
+**Consequences**:
+
+`SPEC.md`, `ROADMAP.md`, `services/gateway/SPEC.md`, and the Track D reference in ADR-0011 use AcceptXMR as the active gateway. ADR-0009 is unchanged, and no runtime gateway code, tests, or builds are changed in this documentation pass.
+
+---
+
+## Post-refinement addendum — native private-view-key access (ADR-0028)
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted clarification; native implementation deferred to the wallet phases.
+
+### C17 — Private view-key authentication and memory boundary conflict
+
+**Observed state**:
+
+- `DB_ARC_and_TEST_PLANNING.md` allowed an optional private view key to use JavaScript-facing `expo-secure-store` and biometric/PIN-derived HKDF.
+- ADR-0028's accepted wallet-secret boundary excludes all Monero private keys from JavaScript; ADR-0038 specifies biometric-only seed/spend-key access with no PIN fallback.
+- The separate AcceptXMR gateway already holds the Runner's private view key in encrypted view-only configuration, but never receives a spend key (ADR-0009; `services/gateway/SPEC.md`).
+
+**Resolution**:
+
+The user confirmed that all Monero wallet secrets—including the seed, spend keys, and any locally persisted private view key—remain native-only within both mobile apps. This does not change the existing AcceptXMR gateway's separate encrypted Runner view key or its view-only/no-spend-key boundary. Seed and spend-key access is biometric-only with no PIN fallback. The optional private view key may use a PIN-derived HKDF key as a narrow exception to biometric-only access, but its PIN handling, derivation, local storage, and use remain inside native `SecureMemory`; neither PIN nor local key enters JavaScript. ADR-0028 records this exception, and ADR-0026/ADR-0027/ADR-0038 now scope the no-PIN rule to seed/spend-key access.
+
+**Alternatives considered**:
+
+- Make the optional private view key biometric-only like the seed/spend keys — rejected by the user's choice of the narrow native PIN-derived option.
+- Allow the private view key to pass through JavaScript because it is not the mnemonic — rejected; it is still a wallet secret.
+
+**Consequences**:
+
+`DB_ARC_and_TEST_PLANNING.md` now specifies native-only view-key storage and derivation, removes the superseded Part I schema example's `view_key_encrypted` column to match the canonical v2 metadata table, and includes pending tests for the PIN-HKDF exception. No runtime code or tests are created or run in this documentation phase.
+
+---
+
 ## Decision Log
 
 | ID | Decision | Status |
@@ -325,7 +432,8 @@ introduced by this addendum.
 | Q18 | Admin service engine: SQLite + SQLCipher | ✅ A |
 | Q20 | No address column on the Customer device | ✅ A |
 | Q21 | Runners never see customer strikes | ✅ A (ADR-0005) |
-| Q22 | Wallet lives on the Runner device | ✅ A |
+| Q22 | Wallet was Runner-only | Superseded by ADR-0028 (Customer + Runner local wallets) |
+| Q23 | Customer and Runner each have an independent local Monero wallet | ✅ ADR-0028 |
 
 ## ADRs created
 

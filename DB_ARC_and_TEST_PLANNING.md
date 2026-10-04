@@ -34,7 +34,7 @@ DAMZ uses a **three-tier storage architecture**:
 | Tier | Technology | Purpose | Encryption |
 |------|-----------|---------|------------|
 | **Tier 1: Local Encrypted DB** | WatermelonDBCipher (SQLCipher fork) | Structured data: orders, DIDs, wallet metadata, session state | AES-256 (SQLCipher) |
-| **Tier 2: Secure Key Store** | `expo-secure-store` / React Native Keychain | Encryption keys, wallet seeds, biometric-protected secrets | Hardware-backed (Keychain/Keystore) |
+| **Tier 2: Secure Key Store** | Platform Keychain/Keystore; `expo-secure-store` for general keys; native `SecureMemory` for Monero wallet secrets (ADR-0028) | Encryption keys, independent Customer/Runner wallet secrets | Hardware-backed at rest; wallet-secret plaintext remains native-only |
 | **Tier 3: Decentralized Blob Store** | IPFS (Helia or Meshkit S3 backend) | Encrypted proof bundles: delivery photos, ZK location proofs, signed attestations | AES-256-GCM (client-side, before upload) |
 
 #### Tier 1: Local Encrypted Database — WatermelonDBCipher
@@ -108,11 +108,10 @@ CREATE TABLE messages (
   read_at INTEGER
 );
 
--- Wallet metadata (NOT the seed — seed is in Tier 2)
+-- Wallet metadata only (no Monero wallet secrets; secrets are in Tier 2 via native SecureMemory)
 CREATE TABLE wallet_metadata (
   id INTEGER PRIMARY KEY CHECK(id = 1),  -- Singleton row
   primary_address TEXT NOT NULL,
-  view_key_encrypted BLOB,       -- Encrypted view key (optional)
   account_index INTEGER NOT NULL DEFAULT 0,
   restore_height INTEGER,
   last_sync_height INTEGER
@@ -152,25 +151,26 @@ const database = new Database({
 
 #### Tier 2: Secure Key Store
 
-`expo-secure-store` provides access to the iOS Keychain and Android Keystore/SharedPreferences with encryption. This is where the most sensitive data lives:
+The platform Keychain/Keystore protects secrets at rest. `expo-secure-store` provides JavaScript-facing access for non-wallet keys; Monero wallet-secret plaintext is the exception and is accessed directly by native `SecureMemory` (ADR-0028).
 
 - **SQLCipher database key** — The key that unlocks Tier 1.
-- **Monero wallet seed** — The 25-word mnemonic. Never stored in the SQLCipher database, only in the Keychain/Keystore.
+- **Monero wallet secrets (Customer and Runner)** — The complete 25-word mnemonic, spend keys, and any locally persisted private view key. Each app stores on-device copies only in the platform Keychain/Keystore and accesses plaintext through native `SecureMemory`; no wallet secret is stored in SQLCipher or returned to JavaScript. The separate gateway-side Runner view key is described in §1.6.
 - **DID private keys** — The Ed25519 keys for the user's DID.
 - **Signal Protocol identity keys** — The long-term identity key pair.
 
 **Hardware-backed protection:**
 
-On iOS, Keychain items with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` are stored in the Secure Enclave and cannot be extracted even with root access. On Android, `expo-secure-store` uses the Android Keystore system, which can use StrongBox (dedicated security chip) on Pixel devices and Samsung Knox devices.
+Keychain/Keystore access controls and hardware-backed protection vary by platform and
+device. These controls protect data at rest; they do not make plaintext in a live process
+immune to a privileged memory reader. `mlock()` and zeroization reduce stale wallet-secret
+exposure but do not eliminate active-operation capture (see `THREAT-MODEL.md` and ADR-0028).
 
-```typescript
-// Store Monero seed (never in SQLCipher DB)
-await SecureStore.setItemAsync('damz_monero_seed', mnemonic, {
-  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-  requireAuthentication: true, // Face ID / fingerprint
-  authenticationPrompt: 'Authenticate to access your Monero wallet',
-});
-```
+**Monero wallet-secret API (ADR-0028):** There is intentionally no JavaScript
+`SecureStore.setItemAsync` or `getItemAsync` call for the seed, spend key, or private view
+key. Native `SecureMemory` reads and writes the Keychain/Keystore directly. Native UI
+displays and accepts the complete 25-word phrase for backup and recovery; JavaScript
+receives only non-secret status and metadata. JavaScript-facing `expo-secure-store` remains
+available for non-wallet keys.
 
 #### Tier 3: Decentralized Blob Store (IPFS)
 
@@ -232,7 +232,7 @@ In the earlier spec, I proposed OrbitDB for inventory management. Since inventor
 | Data Type | Storage | Lifetime | Deletion Trigger |
 |-----------|---------|----------|------------------|
 | Identity (DID) | Tier 1 (WatermelonDB) + Tier 2 (keys) | App lifetime | User-initiated wipe |
-| Monero seed | Tier 2 only | App lifetime | User-initiated wipe |
+| Monero wallet secrets | Tier 2 only, native-only plaintext access | App lifetime | User-initiated wipe |
 | Order record | Tier 1 | 90 days after completion | Automatic purge job |
 | Order messages | Tier 1 | 30 days after order completion | Automatic purge job |
 | Delivery proof CID | Tier 1 | 90 days | Automatic purge job |
@@ -253,16 +253,16 @@ Since there is no central database, "sync" means two things:
 
 ### 1.6 Monero Wallet Storage
 
-**Critical distinction**: The Monero wallet seed must never be stored in the SQLCipher database. It lives only in `expo-secure-store` (iOS Keychain / Android Keystore). The SQLCipher database stores only **wallet metadata**: primary address, account index, restore height, last sync height.
+**Critical distinction (ADR-0028)**: The Customer and Runner apps each own a separate local Monero wallet. Its complete 25-word mnemonic, spend key, and any locally persisted private view key must never be stored in SQLCipher or routed through JavaScript. Each on-device secret is held at rest in iOS Keychain / Android Keystore and accessed directly by native `SecureMemory`. The separate AcceptXMR gateway holds the Runner's private view key in encrypted view-only configuration and never receives a spend key (ADR-0009; `services/gateway/SPEC.md`). Each app's SQLCipher database stores only **that device's non-secret wallet metadata**: primary address, account index, restore height, last sync height.
 
-**View key handling**: The private view key is optional to store. If stored, it is encrypted with a key derived from the user's biometric/PIN via HKDF and placed in `expo-secure-store`. The app can function without storing the view key if it relies on the Monero gateway for balance and transaction detection.
+**View key handling**: The local private view key remains optional to persist. If persisted, it may be encrypted using a PIN-derived HKDF key as the narrow exception in ADR-0028. PIN collection, derivation, Keychain/Keystore access, and key use occur only inside native `SecureMemory`; neither PIN nor plaintext key may enter JavaScript or JSI. The app can omit the view key and rely on the Monero gateway for balance and transaction detection.
 
 **Reference implementations:**
 
 - **Monerujo** (Android): Stores wallet files in app-internal storage accessible only by the app on non-rooted devices. Wallet data is encrypted with the wallet password using the Monero encryption scheme.
 - **MyMonero**: Android data is encrypted and saved using AndroidKeyStore and SharedPreferences. iOS uses SwiftKeychainWrapper. All secret data is encrypted with AES-256 symmetric key directly on the device.
 
-DAMZ follows MyMonero's pattern: seed in Keychain/Keystore, metadata in SQLCipher.
+DAMZ uses platform secure storage for the seed at rest and native `SecureMemory` for all plaintext seed access; each app's own SQLCipher database stores only its non-secret wallet metadata.
 
 ### 1.7 Database Architecture Diagram
 
@@ -302,16 +302,16 @@ DAMZ follows MyMonero's pattern: seed in Keychain/Keystore, metadata in SQLCiphe
                             │
 ┌───────────────────────────┼─────────────────────────────────────────┐
 │                    ┌──────▼───────┐                                  │
-│                    │ expo-secure- │  (iOS Keychain / Android         │
-│                    │ store        │   Keystore, biometric-gated)     │
+│                    │ OS Secure    │  (Keychain/Keystore; native       │
+│                    │ Store        │   SecureMemory for wallet seeds)│
 │                    └──────┬───────┘                                  │
 │                           │                                         │
 │  ┌────────────────────────┼────────────────────────┐                │
 │  │                        │                        │                │
 │  ▼                        ▼                        ▼                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │ SQLCipher    │  │ Monero seed  │  │ DID private keys         │  │
-│  │ DB key       │  │ (25 words)   │  │ Signal identity keys     │  │
+│  │ SQLCipher    │  │ Monero keys  │  │ DID private keys         │  │
+│  │ DB key       │  │ (native only)│  │ Signal identity keys     │  │
 │  └──────────────┘  └──────────────┘  └──────────────────────────┘  │
 │                                                                     │
 │                    TIER 2: SECURE KEY STORE                         │
@@ -341,7 +341,8 @@ DAMZ follows MyMonero's pattern: seed in Keychain/Keystore, metadata in SQLCiphe
 |-------------|------|---------|--------|
 | Reactive local DB | WatermelonDB | 0.27+ | `github.com/Nozbe/WatermelonDB` |
 | SQLCipher fork | WatermelonDBCipher | 0.27+ | `github.com/10play/WatermelonDBCipher` |
-| Secure key store | `expo-secure-store` | 14+ | `docs.expo.dev/versions/latest/sdk/securestore` |
+| General secure key store | `expo-secure-store` | 14+ | Non-wallet keys; not used for Monero seed plaintext |
+| Native wallet secret boundary | `SecureMemory` C/C++ module (ADR-0028) | Project module, planned | Native Keychain/Keystore access; no wallet key or PIN through JavaScript |
 | Encryption (AES-256-GCM) | `@ipfs-meshkit/meshkit` | 1.2+ | `github.com/IPFS-Meshkit/meshkit0` |
 | IPFS (v2) | Helia | 5+ | `helia.io` |
 | Monero crypto | `react-native-mymonero-core` | 0.4+ | `github.com/EdgeApp/react-native-mymonero-core` |
@@ -471,14 +472,15 @@ For React Native, the E2E landscape in 2026 is dominated by **Maestro** for simp
 
 - **Complete order lifecycle**: Customer places order → runner accepts → payment confirmed → runner delivers → customer confirms.
 - **Tor connectivity**: App starts Tor daemon, connects to `.onion` relay, exchanges a message.
-- **Biometric authentication**: Secure store access is gated by Face ID / fingerprint.
+- **Biometric authentication**: Seed and spend-key access is gated by the platform biometric prompt inside native `SecureMemory`; the optional private view key may use the documented native PIN-derived HKDF exception. No wallet secret or PIN crosses into JavaScript.
 - **Offline behavior**: Runner app works without network, syncs when connectivity is restored.
 - **Data purge**: Orders older than 90 days are automatically deleted.
-- **Customer screens**: Onboarding → Discover → Item Selection → Address → Review → Payment → Tracking → Chat → Verification → History → Disputes → Settings
-- **Runner screens**: Onboarding → Dashboard → Price List → Order Requests → Accept → Active Order → Capture → Upload → Wallet → Settings
-- **Converter flow**: ZAR→XMR (XmrBazaar deep link) → Order payment; BTC→XMR (UnstoppableSwap) → Order payment
+- **Customer screens**: Onboarding (native wallet setup/backup) → Discover → Item Selection → Address → Review → Payment (local wallet send) → Tracking → Chat → Verification → History → Disputes → Settings
+- **Runner screens**: Onboarding (native wallet setup/backup) → Dashboard → Price List → Order Requests → Accept → Active Order → Capture → Upload → Wallet → Settings
+- **Converter flow**: ZAR→XMR (XmrBazaar deep link) → Customer wallet → Order payment; BTC→XMR (UnstoppableSwap) → Customer wallet → Order payment
 - **Dispute flow**: Raise → Admin review → Proof key share → Resolution → Refund
-- **Wallet flow**: Seed backup → Biometric unlock → Subaddress receive → Withdraw (XMR→ZAR) → Duress PIN
+- **Customer wallet flow**: Native 25-word phrase generation/display/restore → biometric unlock → send XMR to Runner payment destination
+- **Runner wallet flow**: Native 25-word phrase generation/display/restore → biometric unlock → receive/subaddress → withdraw (XMR→ZAR) → duress PIN
 - **Error states**: Tor down, relay down, payment expired, ZK proof failed, photo attestation failed
 
 ```yaml
@@ -608,6 +610,36 @@ Tests must verify both valid paths and invalid attempts.
 **Signal Protocol**: Test vectors from libsignal test suite — verify encryption/decryption round-trip.
 **Monero**: Test vectors from Monero test suite — verify subaddress derivation, transaction creation.
 
+### 2.6.2 Native Secure-Memory Test Gate (ADR-0028)
+
+These are planned acceptance tests for both mobile apps; they remain pending until their
+wallet phases. No runtime tests are run as part of this documentation directive.
+
+- **Bridge contract — TC-SEC-MEM-01 to TC-SEC-MEM-04**: inspect the exported API and
+  instrumentation to verify that no seed, spend key, private view key, or view-key PIN is
+  returned to or accepted from JavaScript/JSI as a string, typed array, or other JS-managed
+  value; JavaScript receives only non-secret status and metadata. Confirm no wallet-secret
+  remnants in the JS heap, logs, or crash reports after wallet operations.
+- **Native phrase UI — TC-WALLET-01 to TC-WALLET-04**: verify that generation, display,
+  entry, and restoration of the full 25-word Monero mnemonic complete in native UI/module
+  code and remain usable for new-device recovery without the phrase entering
+  JS-managed state.
+- **Buffer lifecycle — TC-SEC-MEM-05 to TC-SEC-MEM-08**: verify `mlock()` where supported
+  and call `secure_memset()` before release on success, error, and cancellation paths;
+  verify prompt release of native/JSI handles and no stale secret buffer after an operation.
+- **Private view-key exception — TC-SEC-MEM-09 to TC-SEC-MEM-11**: when the optional
+  private view key is persisted, verify PIN-derived HKDF and secure-store access run wholly
+  inside native `SecureMemory`; verify seed/spend-key operations remain biometric-only and
+  no key or PIN is exposed to JavaScript.
+- **Forensic-memory check**: after wallet operations, inspect the unlocked app's JS heap and
+  captured memory for wallet-secret remnants. The test must confirm no seed, spend key, or
+  private view key or view-key PIN is present in JavaScript-managed memory. It must not
+  claim protection from a privileged live capture during an active operation; that remains a documented
+  residual risk.
+- **Platform gate**: test the minimum supported iOS and Android versions, verify lock
+  limits/zeroization behavior, and apply the approved platform fallback if `mlock()` is
+  unavailable (OQ-SEC-MEM-001).
+
 ### 2.7 Requirements Traceability Matrix (Sample)
 
 | Req ID | Requirement | Test Cases | Status |
@@ -619,7 +651,11 @@ Tests must verify both valid paths and invalid attempts.
 | REQ-PROOF-01 | Photo must be hardware-signed | TC-PROOF-01 to TC-PROOF-04 | Pending |
 | REQ-PROOF-02 | Location proof must be ZK-verifiable | TC-PROOF-05 to TC-PROOF-08 | Pending |
 | REQ-DB-01 | All local data encrypted with SQLCipher | TC-DB-01 to TC-DB-05 | Pending |
-| REQ-DB-02 | Seed never stored in SQLCipher DB | TC-DB-06 | Pending |
+| REQ-DB-02 | Monero wallet secrets never stored in SQLCipher DB | TC-DB-06 | Pending |
+| REQ-SEC-MEM-01 | Customer and Runner wallet secrets and the view-key PIN never cross the JavaScript/JSI boundary | TC-SEC-MEM-01 to TC-SEC-MEM-04 | Pending |
+| REQ-SEC-MEM-02 | Native wallet-secret buffers are locked where supported and zeroized on every exit path | TC-SEC-MEM-05 to TC-SEC-MEM-08 | Pending |
+| REQ-SEC-MEM-03 | Optional private view-key PIN/HKDF handling stays native; neither PIN nor key enters JavaScript; seed/spend keys stay biometric-only | TC-SEC-MEM-09 to TC-SEC-MEM-11 | Pending |
+| REQ-WALLET-01 | Both apps support native-only backup/recovery of the full 25-word Monero mnemonic | TC-WALLET-01 to TC-WALLET-04 | Pending |
 | REQ-MSG-01 | Messages E2EE with Signal Protocol | TC-MSG-01 to TC-MSG-06 | Pending |
 
 ### 2.8 CI/CD Integration
@@ -645,7 +681,7 @@ Stage 8: Coverage Gate         (fail if < 70% on core modules)
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Local DB engine | WatermelonDB + SQLCipher | Reactive, offline-first, AES-256 encryption |
-| Key storage | `expo-secure-store` | Hardware-backed, biometric-gated |
+| Key storage | Platform Keychain/Keystore; Expo for non-wallet keys; native `SecureMemory` for Monero wallet secrets | Hardware-backed at rest; wallet-secret plaintext never enters JavaScript |
 | Blob storage | Meshkit S3 → Helia (v2) | Client-side AES-GCM, no daemon needed |
 | OrbitDB | **Not used** | Inventory management removed; RN support immature |
 | E2E framework | Maestro (v1) → Detox (fallback) | Lowest setup, YAML-based, cross-platform |
@@ -653,7 +689,7 @@ Stage 8: Coverage Gate         (fail if < 70% on core modules)
 | SAST tool | `narvy-cli` | Local, no account, high-signal findings |
 | Methodology | V-Model + STLC | Early test planning, security at every level |
 | Contract testing | OpenAPI + Relay schema + libsignal vectors | Client/server compatibility |
-| Wallet UX | 24-word seed, biometric-only, duress PIN | Max security, practical UX |
+| Wallet UX | Independent Customer/Runner wallets; native-only 25-word mnemonic and wallet secrets; biometric-only seed/spend access; optional private-view-key PIN-HKDF exception remains native | No central wallet; wallet secrets never enter JavaScript |
 | Push notifications | UnifiedPush (self-hosted) | No Google/Apple, works over Tor |
 | Distribution | F-Droid + GrapheneOS/CalyxOS | No Play Store, reproducible builds |
 | Converter | Integrated tab, UnstoppableSwap BTC↔XMR | In-app atomic swaps for BTC holders |

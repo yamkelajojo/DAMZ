@@ -39,7 +39,7 @@ damz/
 │   ├── ui/                # Shared UI components
 │   └── types/             # Shared TypeScript types
 ├── services/
-│   ├── monero-gateway/    # MoneroPay wrapper (.onion)
+│   ├── monero-gateway/    # Custom Rust gateway using AcceptXMR (.onion)
 │   ├── relay/             # Cwtch-style discardable relay
 │   └── ipfs-pinner/       # Self-hosted IPFS pinning (.onion)
 ├── docs/
@@ -61,9 +61,9 @@ damz/
 - The adversary can observe all network traffic to and from the device.
 - The adversary cannot break AES-256-GCM, X25519, Ed25519, or zk-SNARK soundness.
 - The adversary may operate malicious relay nodes.
-- The adversary does not have physical access to the device during operation.
-- The adversary does not have a rooted/jailbroken device (memory extraction out of scope).
-- There is no central store of order content, chat content, proof content, or user identity. The Admin service is authoritative only for moderation state and holds zero rows of order, message, or proof data.
+- The adversary may attempt a forensic memory capture while an app is unlocked; ADR-0028 keeps wallet secrets and the optional view-key PIN out of JavaScript and shortens their native-memory lifetime. Privileged live-process capture remains a residual risk.
+- The adversary does not control a rooted/jailbroken operating system (kernel-level memory extraction is out of scope).
+- There is no central user database, custodial wallet, or central store of order, chat, proof, or identity data. No service holds a mnemonic seed or spend key; the AcceptXMR gateway holds only the Runner's private view key in encrypted view-only configuration for payment monitoring (ADR-0009). The Admin service is authoritative only for moderation state and holds zero rows of order, message, or proof data.
 
 **Out of scope**:
 - Compromised operating system (rooted/jailbroken device).
@@ -346,6 +346,15 @@ This library packages Monero C++ crypto methods for use on React Native. It has 
 
 **Available methods**: `addressAndKeysFromSeed`, `compareMnemonics`, `createTransaction`, `decodeAddress`, `estimateTxFee`, `generateKeyImage`, `generatePaymentId`, `generateWallet`, `isIntegratedAddress`, `isSubaddress`, `isValidKeys`, `mnemonicFromSeed`, `newIntegratedAddress`, `seedAndKeysFromMnemonic`.
 
+**Secure integration boundary (ADR-0028)**: The Customer and Runner apps each own a
+separate local wallet. The current TypeScript wrapper must not call APIs that return or
+accept a seed, spend key, or private view key across the JavaScript bridge. Seed generation,
+restoration, view-key access/derivation, the optional view-key PIN/HKDF flow, signing,
+transaction creation, secure-store access, and the 25-word backup/recovery UI must run in
+native `SecureMemory` code. Neither PIN nor wallet key enters JavaScript; JavaScript receives
+only non-secret status and metadata. The existing `MoneroWallet` scaffold does not meet
+this requirement and is not a production wallet implementation.
+
 **Installation**:
 
 ```bash
@@ -379,22 +388,23 @@ Build a custom Monero payment gateway in Rust using the `acceptxmr` library, dep
 
 Runs on same VPS as admin service + relay, all Rust, single binary or small set of binaries. monerod runs alongside (separate process, RPC over localhost). View-only mode: gateway only needs view key + primary address; spend key stays offline.
 
-### 5.3 Alternative: AcceptXMR (Rust Library)
+### 5.3 AcceptXMR Gateway Integration (ADR-0009)
 
 **Source**: https://github.com/busyboredom/acceptxmr
 
 AcceptXMR is a Rust library that generates subaddresses using your private view key and primary address. It watches for payments sent to that subaddress using a Monero daemon of your choosing, updating the UI in realtime and optionally performing a configurable callback once payment is confirmed.
 
-This is a lighter-weight alternative to MoneroPay if you prefer to build the gateway in Rust. It does not include an HTTP API — you would build that around it.
+This is the selected Rust library for ADR-0009. It does not include an HTTP API; the custom gateway wraps it to expose the endpoints specified in §5.2.
 
 ### 5.4 ZAR ↔ XMR On-Ramp (Converter Feature — Integrated in Customer/Runner Apps)
 
 **Customer App**: "Convert" tab for ZAR→XMR before ordering
+- Customer holds an independent local Monero wallet and uses it to pay Runner subaddresses.
 - XmrBazaar / Haveno deep links for P2P exchange rates
 - UnstoppableSwap (COMIT protocol) for BTC→XMR atomic swaps in-app
-- No wallet, no swap execution — just rate display + deep links + atomic swap execution
+- Wallet seeds and seed-dependent operations stay in native `SecureMemory` code (ADR-0028); the Converter is not a custodian.
 
-**Runner App**: "Convert" tab for XMR→ZAR (cashing out earnings)
+**Runner App**: Holds its own independent local Monero wallet for receiving payments; "Convert" tab supports XMR→ZAR (cashing out earnings).
 - Haveno for XMR→ZAR
 - Direct to bank via P2P
 
@@ -425,7 +435,7 @@ monero-wallet-cli --stagenet
 start_mining <yourwalletaddress> 1
 ```
 
-MoneroPay has been tested against stagenet and regtest.
+Use the selected AcceptXMR gateway with Monero stagenet or regtest for integration testing.
 
 ---
 
@@ -572,8 +582,8 @@ Open-sourced under MIT/Apache 2.0 dual license.
 │                                                                      │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
 │  │ DID Wallet   │  │ Signal Proto │  │ Monero Wallet            │  │
-│  │ (credebl)    │  │ (expo-       │  │ (react-native-mymonero-  │  │
-│  │              │  │  libsignal)  │  │  core)                   │  │
+│  │ (credebl)    │  │ (expo-       │  │ (native SecureMemory)    │  │
+│  │              │  │  libsignal)  │  │                          │  │
 │  └──────┬───────┘  └──────┬───────┘  └────────────┬─────────────┘  │
 │         │                 │                        │                │
 │         └─────────────────┼────────────────────────┘                │
@@ -599,8 +609,8 @@ Open-sourced under MIT/Apache 2.0 dual license.
 │  │                        │                        │                │
 │  ▼                        ▼                        ▼                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │ MoneroPay    │  │ IPFS Pinner  │  │ Signal Protocol Relay    │  │
-│  │ Gateway      │  │ (.onion)     │  │ (Sealed Sender routing)  │  │
+│  │ AcceptXMR    │  │ IPFS Pinner  │  │ Signal Protocol Relay    │  │
+│  │ Gateway Rust │  │ (.onion)     │  │ (Sealed Sender routing)  │  │
 │  │ (.onion)     │  │              │  │                          │  │
 │  └──────┬───────┘  └──────┬───────┘  └────────────┬─────────────┘  │
 │         │                 │                        │                │
@@ -629,9 +639,10 @@ Open-sourced under MIT/Apache 2.0 dual license.
 │  │                        │                        │                │
 │  ▼                        ▼                        ▼                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │ DID Wallet   │  │ Signal Proto │  │ Photo Attestation        │  │
-│  │ (credebl)    │  │ (expo-       │  │ (@realreel/photo-attest) │  │
-│  │              │  │  libsignal)  │  │                          │  │
+│  │ DID + Monero │  │ Signal Proto │  │ Photo Attestation        │  │
+│  │ Wallets      │  │ (expo-       │  │ (@realreel/photo-attest) │  │
+│  │ (credebl +   │  │  libsignal)  │  │                          │  │
+│  │ SecureMemory)│  │              │  │                          │  │
 │  └──────────────┘  └──────────────┘  └────────────┬─────────────┘  │
 │                                                    │                │
 │                                          ┌─────────▼─────────────┐  │
@@ -649,6 +660,11 @@ Open-sourced under MIT/Apache 2.0 dual license.
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+Both device diagrams represent independent local Monero wallets. Each app confines its
+wallet secrets and secret-dependent operations to native `SecureMemory`; the Customer wallet
+sends funds to the Runner's per-order payment destination, and the Admin service holds no
+wallet or wallet secrets for either app.
+
 ---
 
 ## 9. Data Flow: Complete Order Lifecycle
@@ -658,8 +674,8 @@ Open-sourced under MIT/Apache 2.0 dual license.
 1. Customer opens app, selects items from the eight available (Cabbage, Spinach, Cinnamon, Cauliflower, Rock Salt, Flour, Bicarbonate of Soda, Grape Soda (Small Bottle)).
 2. Customer's app queries nearby runners via the relay (Tor onion service discovery). Runners advertise availability by publishing their onion service to a community-maintained IPNS record.
 3. Customer selects a runner and places an order. Order details (items, quantities, delivery address geohash) are encrypted with the runner's Signal Protocol public key.
-4. Customer's app generates a Monero subaddress request via the MoneroPay gateway (`.onion`). The gateway returns a subaddress + amount in XMR.
-5. Customer sends XMR to the subaddress. MoneroPay detects the transaction and calls back to the relay.
+4. Customer's app requests a payment from the selected AcceptXMR gateway (`.onion`), which returns the Runner's per-order subaddress and amount in XMR.
+5. Customer's native wallet sends XMR to that subaddress. AcceptXMR detects the transaction and calls back to the relay.
 6. Relay notifies runner via the runner's onion service. Runner's app decrypts the order details.
 
 ### 9.2 Order Fulfillment (Runner)
@@ -779,7 +795,7 @@ Open-sourced under MIT/Apache 2.0 dual license.
 |---|---|---|
 | `react-native-nitro-tor` battery drain | High | Foreground service with persistent notification; allow user to toggle Tor when idle |
 | ZK proof generation on low-end devices | Medium | Use `@ajna-inc/poe-proofs` with fallback to simpler location hash if proof fails |
-| MoneroPay gateway downtime | High | Multiple gateway instances on different `.onion` addresses; app discovers via IPNS |
+| AcceptXMR gateway downtime | High | Multiple custom Rust gateway instances on different `.onion` addresses; app discovers via IPNS |
 | Relay node compromise | Medium | Discardable relay design: no logs, no persistent state; multiple relays |
 | LNemail service shutdown | Low | LNemail is optional; app functions without email |
 | XmrBazaar/Haveno liquidity | Medium | Support both platforms; converter app displays rates from multiple sources |
@@ -828,6 +844,6 @@ The critical engineering challenges are:
 1. **Making `react-native-nitro-tor` reliable on mobile** — battery, background execution, and connection resilience.
 2. **Making ZK location proofs run on mid-range Android devices** — `@ajna-inc/poe-proofs` is the starting point, but Zakura Common's optimizations may need porting.
 3. **Building the discardable relay** — a minimal Rust or Go service that runs behind Tor, stores nothing, and forwards encrypted blobs.
-4. **Deploying and maintaining the `.onion` infrastructure** — MoneroPay gateway, IPFS pinner, relay nodes.
+4. **Deploying and maintaining the `.onion` infrastructure** — AcceptXMR gateway, IPFS pinner, relay nodes.
 
 None of these are unsolvable. They are integration problems, not fundamental research problems. The cryptography is done. The protocols exist. The libraries are published. DAMZ is an assembly project.

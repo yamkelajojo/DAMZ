@@ -36,7 +36,7 @@ schema.
 | `messages` | all | **Device that sends/receives** | Counterparty |
 | `proof_bundles` | `cid`, `captured_at`, `capture_geohash`, `signature_valid`, `uploaded_at` | **Runner** | Customer |
 | `proof_bundles` | `verified_at`, `verification_result`, `verification_note` | **Customer** | Runner |
-| `wallet_metadata` | all | **Runner device only** | — |
+| `wallet_metadata` | all | **Customer or Runner device** (each writes only its own local wallet row) | — |
 | `payment_events` | all | **Customer** (observes payment) | Runner |
 | `strikes` | all | **Admin service** | Customer (mirror) |
 | `runner_directory` | all | **Admin service** | Customer, Runner (mirror) |
@@ -99,7 +99,7 @@ export const TABLE_OWNERSHIP: Record<string, WriterRole | 'shared'> = {
   order_items: 'customer',
   messages: 'shared',
   proof_bundles: 'shared',
-  wallet_metadata: 'runner',
+  wallet_metadata: 'shared', // local wallet row in each app; no cross-device sharing
   payment_events: 'customer',
   strikes: 'admin',
   runner_directory: 'admin',

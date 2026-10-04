@@ -19,6 +19,7 @@
 - Observes all network traffic (metadata, timing, volume)
 - Controls malicious relay nodes
 - Compromises server infrastructure (but not user devices)
+- May attempt a forensic memory capture while an app is unlocked; native wallet handling reduces stale wallet-secret exposure but does not prevent active-operation or privileged live-memory capture
 - Cannot break AES-256-GCM, X25519, Ed25519, zk-SNARK soundness
 - Cannot extract keys from Secure Enclave / StrongBox
 
@@ -36,11 +37,11 @@
 |-----------|----------|------------|
 | Tor transport | All network traffic | `react-native-nitro-tor` in-process daemon; no clearnet fallback |
 | Signal Protocol | Message content | Double Ratchet + X3DH + Sealed Sender; keys in Secure Store |
-| Monero payments | Payment metadata | Subaddresses per order; view-only gateway; no address reuse |
+| Monero payments | Payment metadata; Runner private view key | AcceptXMR gateway keeps the view key encrypted at rest in view-only config; no spend key |
 | ZK location proofs | Runner location | Proof reveals only "within radius"; coordinates never leave device |
 | Photo attestation | Delivery evidence | C2PA + device attestation; hardware-bound signing |
 | IPFS storage | Proof bundles | Client-side AES-256-GCM; key sent separately over Signal chat |
-| Local storage | All user data | SQLCipher (AES-256) + Secure Store (hardware-backed) |
+| Local storage | App data and wallet secrets | SQLCipher for app data; Keychain/Keystore at rest; native `SecureMemory` for wallet-secret access |
 | Admin service | Moderation state | Tor-hidden; DID-signed requests; SQLite+SQLCipher; no order data |
 
 ---
@@ -56,6 +57,7 @@
 | **Forward secrecy (chats)** | Signal Double Ratchet | Session re-keying tests |
 | **Ephemerality** | Auto-purge (30d msgs, 90d orders) | Purge job tests, dispute freeze tests |
 | **Tamper evidence** | SQLCipher + signed price lists | narvy SAST, signature verification tests |
+| **Reduced wallet-secret exposure in unlocked-app memory dumps** | Native `SecureMemory` in both apps, `mlock()`, `secure_memset()`, and no JavaScript wallet-secret values | Planned native buffer lifecycle tests and platform verification (Phases 2–3) |
 
 ---
 
@@ -76,7 +78,7 @@
 - No sensitive data in memory when app backgrounded without active orders
 - Signal Protocol forward secrecy limits exposure to current session
 
-**Not Mitigated**: Cannot prevent memory extraction on rooted device without hardware enclave for all decryption (not feasible for React Native).
+**Not Mitigated**: ADR-0028 covers Monero wallet secrets only. Decrypted message bodies and other plaintext handled by JavaScript can still be extracted from a rooted or otherwise privileged device; `SecureMemory` is not a universal in-memory decryption boundary.
 
 ---
 
@@ -116,6 +118,24 @@
 5. **Retention**: `swaps` table purges at 90 days (same as orders), limiting exposure window
 
 **Future Improvement (v2)**: Encrypt `zar_reference` with a key derived from the swap's HTLC secret, decryptable only by the swap participant after completion.
+
+---
+
+### 4.4 Native Secure-Memory Limitations
+
+**Risk**: A privileged attacker with kernel-level access can read live memory in the native
+module, including a locked buffer. A forensic capture taken while a wallet secret is
+actively being used—before `secure_memset()` runs—may also expose it.
+
+**Assessment**: `mlock()` prevents the buffer from being swapped; it does not make the
+buffer inaccessible to a kernel-level reader. Immediate zeroization shortens the exposure
+window but cannot erase a copy already acquired by an attacker. The control applies to each
+app's Monero seed and any persisted spend/private-view keys routed through `SecureMemory`;
+it does not eliminate the JavaScript-heap exposure of decrypted messages described in §4.1.
+
+**Residual risk**: Rooted/jailbroken or kernel-compromised devices remain out of scope.
+The architecture mitigates stale/swapped wallet-secret exposure, not all forensic memory
+dumps or live privileged memory access.
 
 ---
 

@@ -23,7 +23,7 @@ To activate the real gateway (replace mock), the following must be deployed:
 
 | Component | Requirement |
 |-----------|-------------|
-| **MoneroPay / AcceptXMR** | Deploy `acceptxmr` Rust library as HTTP service |
+| **AcceptXMR gateway (ADR-0009)** | Deploy the `acceptxmr` Rust library behind the custom HTTP service |
 | **Monero node** | `monerod` running on stagenet (testing) → mainnet (production); RPC over localhost |
 | **Subaddress generation** | View key + primary address configured in gateway |
 | **Payment detection callback** | Gateway → relay → runner app notification flow |

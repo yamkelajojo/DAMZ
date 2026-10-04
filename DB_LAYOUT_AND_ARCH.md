@@ -26,7 +26,7 @@ the two hardest ones are ADR-0003 and ADR-0004.
 | 8 | Messages store the Signal envelope; 90-day retention | Messages store the **decrypted body**; envelope only until sent; **30 days** | Q15, Q9 |
 | 9 | Purge ran `unsafeResetDatabase()`, commented "VACUUM" | Purge is a real `DELETE` + `VACUUM`; that call would have **wiped the database** | Q9 |
 | 10 | Delivery address columns on both orders tables | **No address column** — the address exists only in the order chat | Q6, Q20 |
-| 11 | `wallet_metadata` on the Customer app | Wallet belongs to the **Runner**, who is the payee | Q22 |
+| 11 | v1 placed `wallet_metadata` on Customer | Q22 moved the wallet to Runner; ADR-0028 now places an independent local wallet in both apps, using the same table | ADR-0028 |
 | 12 | `runner_registry.total_orders_completed` | **Dropped** — counting orders requires holding order data (ADR-0001) | Q7 |
 
 ---
@@ -79,8 +79,9 @@ CREATE TABLE identity (
 );
 ```
 
-Private keys (DID, Signal identity, wallet seed) never enter this database — they live in
-`expo-secure-store` (see §7).
+Private keys (DID, Signal identity, and either app's Monero seed/spend/view keys) never
+enter this database. DID and Signal keys use platform secure storage; Monero wallet secrets
+are accessed only through native `SecureMemory` (ADR-0028; see §7).
 
 ```sql
 -- People this device has dealt with. ✍️ Owner: the device.
@@ -341,9 +342,10 @@ A rejected proof is re-uploaded as a new row; the order row is never rewritten. 
 coordinates exist in memory only, while the ZK location proof is generated.
 
 ```sql
--- ✍️ Runner device only. The payee holds the wallet; the seed is in secure storage.
--- Wallet UX: 24-word seed, biometric-only unlock (no PIN fallback), duress PIN, auto subaddress labels, fee preview.
--- Recovery: seed phrase restore only. Biometric failure → recovery phrase entry.
+-- ✍️ Both apps locally: each device's row describes only its own wallet.
+-- Wallet secrets: seed and private keys native-only; complete 25-word mnemonic UI (ADR-0028).
+-- Runner UX: biometric-only unlock (no PIN fallback), duress PIN, auto subaddress labels, fee preview (ADR-0026).
+-- Recovery (seed/spend keys): native-only 25-word phrase restore; optional view-key PIN flow is native-only (ADR-0028).
 CREATE TABLE wallet_metadata (
   id               INTEGER PRIMARY KEY CHECK (id = 1),
   primary_address  TEXT,
@@ -491,7 +493,8 @@ that does not exist, so the row — and the plaintext — would sit on disk fore
 | SQLCipher DB key (each app) | `expo-secure-store` | Keychain / Keystore, `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, biometric-gated |
 | DID private key (Ed25519) | `expo-secure-store` | as above |
 | Signal identity key | `expo-secure-store` | as above |
-| Wallet seed (Runner) | `expo-secure-store` | as above; **never** in the database; 24-word seed, biometric-only unlock, duress PIN |
+| On-device Monero wallet secrets (Customer + Runner, independent) | Keychain / Keystore via native `SecureMemory` | Seeds/spend keys: biometric-only, no PIN fallback. Optional local private view key: native PIN-derived HKDF exception. **Never** in SQLCipher or JavaScript; complete 25-word native-only backup/recovery phrase (ADR-0028) |
+| Runner view-key gateway copy | AcceptXMR encrypted configuration | Encrypted at rest with `age`/`sops`; view-only, no spend key (ADR-0009) |
 | Proof key | `orders.proof_key` | inside the SQLCipher file; also sent over the order chat |
 | Admin service DB | SQLCipher, WAL | key from the service environment, not in the repository |
 
@@ -643,8 +646,9 @@ the grilling and follow-up documentation sessions:
 | 0023 | Mock payment: Configurable scenarios | success/timeout/partial/double |
 | 0024 | Engineering philosophy | Silicon-grade, hacker paranoia, delightful UI |
 | 0025 | UI stack: Reusables + NativeWind + Reanimated 3 | shadcn/ui for RN, Tailwind, 60fps |
-| 0026 | Wallet UX | 24-word seed, biometric-only, duress PIN, auto labels, fee preview |
+| 0026 | Runner wallet UX | Biometric-only, duress PIN, auto labels, fee preview; phrase length superseded by ADR-0028 |
 | 0027 | Security flows | Seed restore, recovery phrase, Tor retry, auto re-key, geohash fallback |
+| 0028 | Secure memory and native wallet boundary | Independent Customer and Runner wallets; native-only 25-word Monero seed handling |
 | 0033 | Admin API endpoints | 7 endpoints, DISPUTES, SSE, DID-signed |
 | 0034 | Relay protocol spec | SHA256, TTL, seq nums, backoff, 3 relays, 64KB |
 | 0035 | Dispute resolution | Refund=new payment, runner strikes 3=ban, 14-day timeout |
@@ -662,13 +666,13 @@ the grilling and follow-up documentation sessions:
 ## 12. App Screen Flows (from Grilling)
 
 ### Customer App (13 Screens + Converter Tab)
-1. **Onboarding** — Generate DID, backup 24-word seed, pseudonym, permissions
+1. **Onboarding** — Generate DID and local Monero wallet; display and back up the complete 25-word mnemonic in native UI; set pseudonym and permissions
 2. **Home/Discover** — Nearby runners (runner_directory), filter by radius, availability + fee
 3. **Runner Profile** — Cached price list, items, delivery radius
 4. **Item Selection** — 7 catalog items, runner prices, quantity, running total
 5. **Address Entry** — Geocoded to geohash, saved addresses, map picker
 6. **Order Review** — Items, prices, delivery fee, total ZAR, est. XMR, 15-min expiry
-7. **Payment** — Monero subaddress + QR, countdown, status polling
+7. **Payment** — Send XMR from the Customer's local native wallet to the Runner's Monero subaddress; QR, countdown, status polling
 8. **Order Tracking** — Status timeline, runner coarse geohash, chat button
 9. **Order Chat** — Signal Protocol E2EE, text, photos, proof key
 10. **Delivery Verification** — Proof bundle (photo + ZK), accept/reject, dispute
@@ -689,7 +693,7 @@ the grilling and follow-up documentation sessions:
 9. **Proof Review** — Preview before upload
 10. **Upload & Send Key** — IPFS upload, CID + proof_key over chat
 11. **Order History** — Completed, disputed
-12. **Wallet** — Balance, subaddresses (auto "Order #DMZ-XXX"), withdraw (XMR→ZAR via Haveno), backup (seed phrase, biometric-gated), duress PIN, fee preview
+12. **Wallet** — Balance, subaddresses (auto "Order #DMZ-XXX"), withdraw (XMR→ZAR via Haveno), native-only 25-word backup/recovery, biometric-gated, duress PIN, fee preview
 13. **Settings** — Availability, radius, Tor, backup, about
 **Converter Tab**: XMR→ZAR (Haveno)
 
@@ -702,17 +706,21 @@ the grilling and follow-up documentation sessions:
 
 ## 13. Security Implementation Details
 
-### Wallet (Runner) — ADR-0026
-- **Seed**: 24 words (256-bit entropy)
-- **Unlock**: Biometric-only (FaceID/TouchID/Fingerprint), no PIN fallback
-- **Duress**: Fake PIN → nearly-empty wallet
-- **Subaddress labels**: Auto "Order #DMZ-XXX"
-- **Fee preview**: Shown before send
-- **Recovery**: Seed phrase only (biometric failure → recovery phrase entry)
+### Wallets (Customer and Runner) — ADR-0028; Runner UX — ADR-0026
+- **Wallet placement**: Each app owns an independent device-local Monero wallet; no shared or Admin-held wallet.
+- **Wallet secrets**: Complete 25-word mnemonic, spend keys, and any persisted private view key in both apps. Native-only generation, display, entry, restore, derivation, signing, and transaction operations; JavaScript receives only non-secret status/metadata.
+- **Storage**: On-device wallet secrets at rest in platform Keychain/Keystore through native `SecureMemory`; only non-secret metadata is stored in each app's local `wallet_metadata` row.
+- **Access policy**: Seed and spend-key access is biometric-only with no PIN fallback in both apps. An optional local private view key may use PIN-derived HKDF protection inside native `SecureMemory` (ADR-0028).
+- **Gateway**: AcceptXMR separately holds the Runner's private view key in encrypted view-only configuration; it never receives a spend key (ADR-0009; `services/gateway/SPEC.md`).
+- **Customer use**: Send XMR from the Customer's local wallet to the Runner's per-order payment destination.
+- **Runner duress**: Fake PIN → nearly-empty wallet.
+- **Runner subaddress labels**: Auto "Order #DMZ-XXX".
+- **Runner fee preview**: Shown before send.
+- **Recovery**: Native-only 25-word phrase restore; ADR-0026's remaining Runner UX decisions are unchanged.
 
 ### Migration & Fallbacks — ADR-0027
 - **Identity migration**: Seed phrase restore on new device
-- **Biometric failure**: Recovery phrase entry (no PIN)
+- **Biometric failure (seed/spend keys)**: Native recovery phrase entry; no PIN fallback. Optional private-view-key PIN flow remains the narrow native-only exception in ADR-0028.
 - **Tor issues**: Exponential backoff retry + "Tor connecting..." + offline indicator (cached data)
 - **Signal session corruption**: Automatic re-keying (Signal Protocol handles)
 - **ZK proof failure**: Coarse geohash fallback (no ZK), retry with lower precision

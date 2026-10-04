@@ -41,16 +41,16 @@
 
 ---
 
-## Phase 2: Customer App Skeleton + SQLCipher + Identity
+## Phase 2: Customer App Skeleton + SQLCipher + Identity + Native Wallet
 
-**Goal**: Customer app launches, initializes Tor, creates DID, encrypts DB, backs up seed.
+**Goal**: Customer app launches, initializes Tor, creates DID, encrypts DB, and provisions its independent local Monero wallet through native `SecureMemory`.
 
 **Deliverables**:
 - `apps/customer` Expo app with:
   - Tor daemon startup (ADR-0022)
   - SQLCipher DB initialization with `expo-secure-store` key
   - `did:key` generation via `@did-tools/key` (ADR-0018)
-  - 24-word seed backup flow (biometric-gated)
+  - Native-only 25-word Monero mnemonic generation, backup, and recovery (ADR-0028; biometric-gated)
   - Onboarding screen (1 of 13)
   - Settings screen (13 of 13) — theme, radius, Tor status, backup DID
 - `packages/ui` primitives: Button, Input, Card, Sheet, Toast, ThemeProvider
@@ -62,19 +62,21 @@
 - [ ] App cold starts <3s, shows onboarding
 - [ ] DID generated, stored in DB, private key in Secure Store
 - [ ] DB encrypted — verify file is unreadable without key
-- [ ] Seed backup/restore works (new device simulation)
-- [ ] Biometric unlock gates Secure Store access
+- [ ] Native-only 25-word backup/restore works (new-device simulation); no wallet secret or phrase crosses into JavaScript
+- [ ] Biometric unlock gates native secure-store access for seed/spend-key operations
+- [ ] Optional private view-key PIN-derived HKDF, if persisted, runs wholly in native code with no PIN/key crossing into JavaScript
 - [ ] Tor starts, shows onion address in settings
 - [ ] Unit tests: DIDManager, TorManager, DB init
 
 **Risks**:
 - `react-native-nitro-tor` stability on iOS/Android
-- `expo-secure-store` biometric behavior differences
+- Native `SecureMemory` / Keychain/Keystore behavior and platform-specific memory-locking support (OQ-SEC-MEM-001/002)
+- Biometric behavior differences across supported devices
 - Hermes + SQLCipher performance
 
 ---
 
-## Phase 3: Runner App Skeleton + SQLCipher + Identity
+## Phase 3: Runner App Skeleton + SQLCipher + Identity + Native Wallet
 
 **Goal**: Runner app launches, creates DID + onion, claims pre-created registry entry.
 
@@ -83,6 +85,7 @@
   - Same Tor + SQLCipher + DID foundation as Customer
   - Onion service generation via `mkp224o` (dev) / Tor daemon (prod)
   - Runner onboarding: claim pre-created registry (ADR-0015)
+  - Independent local Monero wallet using native `SecureMemory`; native-only 25-word mnemonic backup and recovery
   - Dashboard screen (2 of 13)
   - Settings screen (13 of 13) — availability, radius, Tor, backup
 - Shared `packages/core` identity logic
@@ -93,8 +96,10 @@
 - [ ] Runner generates onion address on first launch
 - [ ] Claims registry entry via `/runners/claim` (mock admin)
 - [ ] `identity.is_available` toggles correctly
-- [ ] DB encrypted, seed in Secure Store
-- [ ] Unit tests: Runner onboarding flow
+- [ ] Runner wallet secrets remain in platform secure storage via native `SecureMemory`; no wallet secret or phrase crosses into JavaScript
+- [ ] Native-only 25-word backup/recovery and biometric-gated seed/spend-key access work
+- [ ] Optional private view-key PIN-derived HKDF, if persisted, runs wholly in native code with no PIN/key crossing into JavaScript
+- [ ] Unit tests: Runner onboarding and native wallet boundary
 
 **Risks**:
 - Onion service generation reliability (`mkp224o` vs in-app)
@@ -267,6 +272,7 @@
 - Payment detection → callback to relay → runner notification
 - Payment screen (7 of 13 customer) — QR, countdown, status
 - Wallet screen (12 of 13 runner) — balance, subaddresses, withdraw
+- Customer send and Runner signing/transaction creation through native `SecureMemory`; JavaScript receives only non-secret results (ADR-0028)
 - Fee preview, 5% platform fee extraction flow
 
 **Dependencies**: Phase 5 (chat for payment notification), Phase 8 (relay callback)
@@ -419,6 +425,6 @@
 ## Open Questions
 
 - **OQ-ROAD-001**: Phase 6 Zakura port — if delayed, ship `@ajna-inc/poe-proofs` as-is with geohash fallback?
-- **OQ-ROAD-002**: Phase 9 Monero gateway — if `acceptxmr` has issues, fallback to MoneroPay (Node.js)?
+- **OQ-ROAD-002 (resolved by ADR-0009 and refinement C16)**: AcceptXMR remains the canonical Rust gateway; do not fall back to MoneroPay/Node.js. If AcceptXMR proves unusable, Admin/Developer must propose a Rust-compatible alternative through an ADR before Phase 9.
 - **OQ-ROAD-003**: Phase 11 — how many physical devices for concurrent testing? Budget for 4 (2 customer + 2 runner)?
 - **OQ-ROAD-004**: F-Droid submission timing — start metadata preparation in Phase 10?
