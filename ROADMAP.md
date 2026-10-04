@@ -231,8 +231,8 @@
 **Deliverables**:
 - `services/admin` binary (Rust + Axum + SQLCipher + Arti)
 - Admin CLI (runner add/ban, strike issue, dispute resolve, settings)
-- REST + SSE sync endpoints (ADR-0016, ADR-0028)
-- Bounded-scope startup check (ADR-0036)
+- REST + SSE sync endpoints (ADR-0016, ADR-0033)
+- Bounded-scope startup check (ADR-0041)
 - DID-signed request auth
 - Apps sync `strikes`, `directory`, `settings`, `disputes` mirrors
 - Minimal admin dashboard (web, served by admin service or separate)

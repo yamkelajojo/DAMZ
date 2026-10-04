@@ -1,4 +1,4 @@
-# ADR-0035: Documentation & Legal
+# ADR-0040: Documentation & Legal
 
 **Status**: Accepted
 

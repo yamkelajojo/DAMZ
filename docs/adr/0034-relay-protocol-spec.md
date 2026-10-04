@@ -1,4 +1,4 @@
-# ADR-0029: Relay Protocol Specification
+# ADR-0034: Relay Protocol Specification
 
 **Status**: Accepted
 

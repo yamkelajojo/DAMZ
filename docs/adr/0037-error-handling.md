@@ -1,4 +1,4 @@
-# ADR-0032: Centralized Error Handling
+# ADR-0037: Centralized Error Handling
 
 **Status**: Accepted
 

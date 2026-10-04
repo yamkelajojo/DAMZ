@@ -338,3 +338,51 @@ introduced by this addendum.
 ## Glossary created
 
 - `GLOSSARY.md`
+
+---
+
+## ADR numbering reconciliation — reserve ADR-0028 through ADR-0032
+
+**Date**: 2026-10-04
+**Owner**: Admin/Developer
+**Status**: Accepted
+
+### Context
+
+The requested security decisions use ADR-0028 through ADR-0032, but those identifiers
+already name accepted decisions. Reusing them would overwrite the existing decision
+record and break references. The user confirmed that the existing decisions should be
+renumbered so the requested ADRs can retain their specified identifiers.
+
+### Decision
+
+Move the existing accepted ADRs 0028–0037 forward by five IDs, preserving each decision,
+filename topic, and status. The five requested ADRs will use the newly available IDs
+0028–0032. Update all in-repository references to use the new identifiers.
+
+| Previous ID | Preserved decision | New ID |
+|---|---|---|
+| ADR-0028 | Admin Service API Endpoints | ADR-0033 |
+| ADR-0029 | Relay Protocol Specification | ADR-0034 |
+| ADR-0030 | Dispute Resolution Flow | ADR-0035 |
+| ADR-0031 | Push Notifications: UnifiedPush | ADR-0036 |
+| ADR-0032 | Centralized Error Handling | ADR-0037 |
+| ADR-0033 | App Lifecycle & Permissions | ADR-0038 |
+| ADR-0034 | Build & CI/CD Pipeline | ADR-0039 |
+| ADR-0035 | Documentation & Legal | ADR-0040 |
+| ADR-0036 | Bounded Admin Service Limits | ADR-0041 |
+| ADR-0037 | Testing Methodology and Tool Selection | ADR-0042 |
+
+### Alternatives considered
+
+- Assign the five new security decisions IDs 0038–0042 — rejected because the user
+  confirmed the requested IDs 0028–0032.
+- Replace or delete the accepted ADRs already numbered 0028–0032 — rejected because that
+  would lose accepted decisions and their audit history.
+
+### Consequences
+
+This is an identifier and reference migration only. No existing design decision is removed,
+reversed, or superseded. The updated ADR files and this mapping preserve traceability; all
+future in-repository references use the new IDs. The new ADRs 0028–0032 will be added in
+subsequent, separately reviewed directive commits.

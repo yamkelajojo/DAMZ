@@ -201,7 +201,7 @@ cargo build --release -p damz-gateway
 
 ### 7.2 Tor Hidden Service
 
-Same pattern as relay (ADR-0008, ADR-0029).
+Same pattern as relay (ADR-0008, ADR-0034).
 
 ### 7.3 Environment Variables
 

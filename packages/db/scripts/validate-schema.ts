@@ -107,7 +107,7 @@ function validate(tables: TableDef[]): string[] {
           const [refTable] = col.references.split('.');
           if (['orders', 'order_items', 'messages', 'proof_bundles', 'payment_events', 'swaps', 'swap_events'].includes(refTable)) {
             if (!(table.name === 'disputes' && ['order_id', 'proof_cid', 'proof_key'].includes(col.name))) {
-              errors.push(`[${table.name}.${col.name}] Admin table references user-data table '${refTable}' — violates bounded-scope (ADR-0001, ADR-0036)`);
+              errors.push(`[${table.name}.${col.name}] Admin table references user-data table '${refTable}' — violates bounded-scope (ADR-0001, ADR-0041)`);
             }
           }
         }

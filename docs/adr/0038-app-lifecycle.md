@@ -1,4 +1,4 @@
-# ADR-0033: App Lifecycle & Permissions
+# ADR-0038: App Lifecycle & Permissions
 
 **Status**: Accepted
 

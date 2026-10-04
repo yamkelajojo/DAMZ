@@ -1,4 +1,4 @@
-# ADR-0036: Bounded Admin Service and the Limits of "No Central Server"
+# ADR-0041: Bounded Admin Service and the Limits of "No Central Server"
 
 **Status**: Accepted
 

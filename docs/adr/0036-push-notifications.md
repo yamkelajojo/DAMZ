@@ -1,4 +1,4 @@
-# ADR-0031: Push Notifications: UnifiedPush
+# ADR-0036: Push Notifications: UnifiedPush
 
 **Status**: Accepted
 

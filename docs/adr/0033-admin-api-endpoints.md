@@ -1,4 +1,4 @@
-# ADR-0028: Admin Service API Endpoints
+# ADR-0033: Admin Service API Endpoints
 
 **Status**: Accepted
 

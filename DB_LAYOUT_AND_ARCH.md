@@ -616,9 +616,10 @@ Recorded so nobody assumes these exist:
 
 ---
 
-## 11. New ADRs from Grilling Session (2026-10-04)
+## 11. ADRs Added After the Original Refinement
 
-The following ADRs were created during the grilling session to document decisions not in the original refinement:
+The following ADRs record architectural decisions and schema reconciliation added during
+the grilling and follow-up documentation sessions:
 
 | ADR | Title | Summary |
 |-----|-------|---------|
@@ -644,14 +645,17 @@ The following ADRs were created during the grilling session to document decision
 | 0025 | UI stack: Reusables + NativeWind + Reanimated 3 | shadcn/ui for RN, Tailwind, 60fps |
 | 0026 | Wallet UX | 24-word seed, biometric-only, duress PIN, auto labels, fee preview |
 | 0027 | Security flows | Seed restore, recovery phrase, Tor retry, auto re-key, geohash fallback |
-| 0028 | Admin API endpoints | 7 endpoints, DISPUTES, SSE, DID-signed |
-| 0029 | Relay protocol spec | SHA256, TTL, seq nums, backoff, 3 relays, 64KB |
-| 0030 | Dispute resolution | Refund=new payment, runner strikes 3=ban, 14-day timeout |
-| 0031 | Push notifications | UnifiedPush, self-hosted, encrypted payload |
-| 0032 | Error handling | Centralized error codes → messages |
-| 0033 | App lifecycle & permissions | Graceful fallbacks, biometric-only |
-| 0034 | Build/CI/CD | Reproducible, Hermes, EAS, GitHub Actions |
-| 0035 | Docs/Legal | AGPL-3.0, single privacy policy, F-Droid metadata |
+| 0033 | Admin API endpoints | 7 endpoints, DISPUTES, SSE, DID-signed |
+| 0034 | Relay protocol spec | SHA256, TTL, seq nums, backoff, 3 relays, 64KB |
+| 0035 | Dispute resolution | Refund=new payment, runner strikes 3=ban, 14-day timeout |
+| 0036 | Push notifications | UnifiedPush, self-hosted, encrypted payload |
+| 0037 | Error handling | Centralized error codes → messages |
+| 0038 | App lifecycle & permissions | Graceful fallbacks, biometric-only |
+| 0039 | Build/CI/CD | Reproducible, Hermes, EAS, GitHub Actions |
+| 0040 | Docs/Legal | AGPL-3.0, single privacy policy, F-Droid metadata |
+| 0041 | Bounded Admin service limits | Precise moderation-only authority and data scope |
+| 0042 | Testing methodology and tool selection | V-Model, STLC, CI and test tooling |
+| 0043 | Client/Admin schema inventory reconciliation | 19 client tables; separate Admin schema; validator alignment |
 
 ---
 
@@ -713,18 +717,18 @@ The following ADRs were created during the grilling session to document decision
 - **Signal session corruption**: Automatic re-keying (Signal Protocol handles)
 - **ZK proof failure**: Coarse geohash fallback (no ZK), retry with lower precision
 
-### Push Notifications — ADR-0031
+### Push Notifications — ADR-0036
 - **UnifiedPush** distributor (self-hosted on admin VPS)
 - Works over Tor, no Google/Apple
 - Encrypted payload via Signal session
 - Apps register via Tor on first launch
 
-### Error Handling — ADR-0032
+### Error Handling — ADR-0037
 - Centralized error system: ErrorBoundary + error codes → user messages
 - Codes: TOR_CONNECTION_FAILED, PAYMENT_EXPIRED, ZK_PROOF_FAILED, etc.
 - Per-screen can override
 
-### Dispute Resolution — ADR-0030
+### Dispute Resolution — ADR-0035
 - Refund = runner sends new Monero payment (no chargebacks)
 - Runner strikes: 3 = ban (admin issues via CLI)
 - Timeout: 14 days auto-dismiss
@@ -732,7 +736,7 @@ The following ADRs were created during the grilling session to document decision
 
 ---
 
-## 14. Build & CI/CD — ADR-0034
+## 14. Build & CI/CD — ADR-0039
 
 **Monorepo**: Turborepo + Bun workspaces + Cargo workspaces
 - `apps/*` (Expo), `packages/*` (TS), `services/*` (Rust)
@@ -755,7 +759,7 @@ The following ADRs were created during the grilling session to document decision
 
 ---
 
-## 15. Legal & Documentation — ADR-0035
+## 15. Legal & Documentation — ADR-0040
 
 **Documents**:
 - ARCHITECTURE.md, API.md, DEPLOYMENT.md, USER_GUIDE_CUSTOMER.md, USER_GUIDE_RUNNER.md

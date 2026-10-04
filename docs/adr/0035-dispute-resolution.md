@@ -1,4 +1,4 @@
-# ADR-0030: Dispute Resolution Flow
+# ADR-0035: Dispute Resolution Flow
 
 **Status**: Accepted
 

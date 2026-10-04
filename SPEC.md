@@ -170,7 +170,7 @@ No Expo plugin — you must run `npx pod-install` and configure native modules m
 
 **Signal Protocol Store**: TypeScript implementation over `expo-sqlite` (SQLCipher) + `expo-secure-store` (ADR-0021). Implements full `SignalProtocolStore` interface: prekeys, sessions, sender keys, identity keys. Long-term identity keys in Secure Store, ephemeral keys in SQLCipher DB.
 
-### 3.4 UnifiedPush Notifications (ADR-0031)
+### 3.4 UnifiedPush Notifications (ADR-0036)
 
 **Implementation**: Self-hosted UnifiedPush distributor (no Google/Apple dependency). Works over Tor. Encrypted payload via Signal session. Apps register via Tor on first launch. Push payload = encrypted Signal message. Battery efficient.
 
