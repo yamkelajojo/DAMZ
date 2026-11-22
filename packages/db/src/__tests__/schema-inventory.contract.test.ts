@@ -1,7 +1,7 @@
 jest.mock(
   '@nozbe/watermelondb',
   () => ({
-    appSchema: ({ version, tables }: { version: number; tables: Array<{ name: string; columns: any[] }> }) => ({
+    appSchema: ({ version, tables }: { version: number; tables: { name: string; columns: any[] }[] }) => ({
       version,
       tables: Object.fromEntries(
         tables.map((table) => [
@@ -105,5 +105,23 @@ describe('REQ-DB-01 / TC-CAT-01 — client database inventory', () => {
     expect(findTable('order_items').columnArray.map(({ name }) => name)).toEqual(
       expect.arrayContaining(['display_name', 'quantity', 'unit_price_zar', 'line_total_zar']),
     );
+  });
+});
+
+describe('TC-DB-RETENTION-01 — purge deadlines declared in the schema', () => {
+  // `purgeExpiredData` reads `purge_after` on these tables, and the v3 migration
+  // hard-codes the swaps column, so the schema is the contract for both.
+  it.each(['orders', 'messages', 'proof_bundles', 'swaps'])(
+    'declares an optional numeric purge_after on %s',
+    (tableName) => {
+      const column = findTable(tableName).columns.purge_after;
+      expect(column).toBeDefined();
+      expect(column.type).toBe('number');
+      expect(column.isOptional).toBe(true);
+    },
+  );
+
+  it('is at schema version 3', () => {
+    expect((schema as { version: number }).version).toBe(3);
   });
 });

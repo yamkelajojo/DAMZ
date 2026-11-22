@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { StyleSheet, type ViewStyle, type TextStyle, View, Text, Pressable } from 'react-native';
+import { Text, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -15,10 +15,22 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { create } from 'zustand';
-import { PhosphorIcon } from 'phosphor-react-native';
-import { cn } from '../../utils/cn';
+import { Info, CheckCircle, Warning, XCircle, X, type Icon } from 'phosphor-react-native';
 
 export type ToastVariant = 'default' | 'success' | 'warning' | 'error' | 'info';
+
+/**
+ * `phosphor-react-native` exports one component per icon; there is no
+ * `PhosphorIcon` factory, so names are mapped to components.
+ */
+type ToastIconName = 'info' | 'check-circle' | 'warning' | 'x-circle';
+
+const TOAST_ICONS: Record<ToastIconName, Icon> = {
+  info: Info,
+  'check-circle': CheckCircle,
+  warning: Warning,
+  'x-circle': XCircle,
+};
 
 interface Toast {
   id: string;
@@ -50,7 +62,7 @@ export function useToast() {
   return useToastStore();
 }
 
-const variantStyles: Record<ToastVariant, { bg: string; fg: string; icon: string; iconColor: string }> = {
+const variantStyles: Record<ToastVariant, { bg: string; fg: string; icon: ToastIconName; iconColor: string }> = {
   default: { bg: '#F0ECE5', fg: '#020101', icon: 'info', iconColor: '#6B625C' },
   success: { bg: '#E5F1EB', fg: '#1F513B', icon: 'check-circle', iconColor: '#2D6A4F' },
   warning: { bg: '#FFF4D6', fg: '#744D00', icon: 'warning', iconColor: '#8A5A00' },
@@ -62,6 +74,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
   const translateX = useSharedValue(400);
   const opacity = useSharedValue(0);
   const { bg, fg, icon, iconColor } = variantStyles[toast.variant ?? 'default'];
+  const ToastIcon = TOAST_ICONS[icon];
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -82,7 +95,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
       }, duration);
       return () => clearTimeout(timer);
     }
-  }, [toast.id]);
+  }, [toast.id, toast.duration, onRemove, translateX, opacity]);
 
   return (
     <Animated.View
@@ -106,7 +119,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
         animatedStyle,
       ]}
     >
-      <PhosphorIcon name={icon} size={20} weight="bold" color={iconColor} />
+      <ToastIcon size={20} weight="bold" color={iconColor} />
       <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: fg }}>{toast.message}</Text>
       {toast.action && (
         <Pressable onPress={toast.action.onPress}>
@@ -116,7 +129,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
         </Pressable>
       )}
       <Pressable onPress={() => onRemove(toast.id)} style={{ padding: 4 }}>
-        <PhosphorIcon name="x" size={18} weight="bold" color={iconColor} opacity={0.6} />
+        <X size={18} weight="bold" color={iconColor} />
       </Pressable>
     </Animated.View>
   );

@@ -1,0 +1,42 @@
+[package]
+name = "damz-gateway"
+description = "Monero gateway using acceptxmr for subaddress generation and payment watching"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+axum = { workspace = true, features = ["macros", "json", "multipart"] }
+tokio = { workspace = true }
+tower-http = { workspace = true, features = ["trace", "cors", "compression-br", "compression-deflate", "compression-gzip", "compression-zstd"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true, features = ["v4", "serde"] }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+bytes = { workspace = true }
+time = { workspace = true }
+
+# Tor
+arti-client = { workspace = true }
+
+# Monero
+acceptxmr = "0.14"
+monero-rpc = "0.5"
+
+# Crypto
+ed25519-dalek = { version = "2.1", features = ["digest"] }
+rand = { version = "0.8", features = ["std"] }
+base64 = { version = "0.22", features = ["std"] }
+bs58 = "0.4"
+curve25519-dalek = "4.1.3"
+hpke = { version = "0.14.1", default-features = false, features = ["alloc", "getrandom", "x25519", "aes"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sha2 = { workspace = true }
+zeroize = "1.8"
+
+[build-dependencies]
+vergen = "8.0"

@@ -1,8 +1,15 @@
-@import "nativewind";
-
-@theme {
-  /* Colors are defined in tailwind.config.js and exposed via NativeWind v4 @theme */
-}
+/*
+ * Shared theme CSS for every DAMZ app.
+ *
+ * Each app's own `global.css` imports this file and declares the `@tailwind`
+ * directives. The directives belong in the app-level file because that is the
+ * entry point handed to `withNativeWind(...)`: NativeWind runs Tailwind against
+ * that file, so directives living only here would never be expanded.
+ *
+ * There is deliberately no `@import "nativewind"` — the package ships no
+ * stylesheet; its preset (registered in `tailwind.config.js`) is what Tailwind
+ * consumes.
+ */
 
 /* Base styles */
 * {
@@ -25,6 +32,8 @@ body {
 /* NativeWind v4 uses CSS variables for theming */
 /* Light theme (default) */
 :root {
+  --font-primary: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   --color-bg-primary: #FFFCF9;
   --color-bg-secondary: #FAF7F4;
   --color-surface-primary: #F0ECE5;
@@ -89,7 +98,8 @@ body {
   --color-overlay: rgba(0, 0, 0, 0.6);
 }
 
-/* Reanimated 3: ensure UI thread animations work */
+/* Respect the OS "reduce motion" preference (web; on native the same preference
+   is read through `AccessibilityInfo`). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

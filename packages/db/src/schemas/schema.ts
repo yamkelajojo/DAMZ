@@ -93,6 +93,10 @@ export const TABLE_SCHEMA_SPECS = [
         { name: 'network_fee_btc', type: 'number', isOptional: true },
         { name: 'network_fee_xmr', type: 'number', isOptional: true },
         { name: 'service_fee_zar', type: 'number', isOptional: true },
+        // Epoch milliseconds, like every other timestamp here. Set once the swap
+        // reaches a terminal status; a NULL deadline is never purged. Purge also
+        // refuses in-flight statuses, so a swap cannot be deleted mid-execution.
+        { name: 'purge_after', type: 'number', isOptional: true },
       ],
     },
     {
@@ -290,7 +294,7 @@ export const TABLE_SCHEMA_SPECS = [
 ] satisfies Parameters<typeof tableSchema>[0][];
 
 export const schema = appSchema({
-  version: 2,
+  version: 3,
   tables: TABLE_SCHEMA_SPECS.map((table) => tableSchema(table)),
 });
 

@@ -7,10 +7,20 @@
  */
 
 import React, { forwardRef, type ReactNode } from 'react';
-import { StyleSheet, type ViewStyle, type TextStyle } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, Easing } from 'react-native-reanimated';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, type ViewStyle, type TextStyle } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { cssInterop } from 'nativewind';
 import { cn } from '../../utils/cn';
+
+/**
+ * Reanimated 3 exposes `View`, `Text`, `Image`, `ScrollView` and `FlatList` on the
+ * `Animated` namespace, but not `Pressable`, so the animated wrapper is created
+ * explicitly. `cssInterop` re-attaches NativeWind's `className` support, which a
+ * bare `createAnimatedComponent` wrapper does not carry.
+ */
+const AnimatedPressable = cssInterop(Animated.createAnimatedComponent(Pressable), {
+  className: 'style',
+});
 
 export interface ButtonProps extends React.ComponentPropsWithoutRef<typeof Pressable> {
   variant?: 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost' | 'link';
@@ -22,7 +32,7 @@ export interface ButtonProps extends React.ComponentPropsWithoutRef<typeof Press
   children: ReactNode;
 }
 
-const Button = forwardRef<Animated.Pressable, ButtonProps>(
+const Button = forwardRef<React.ComponentRef<typeof AnimatedPressable>, ButtonProps>(
   (
     {
       variant = 'primary',
@@ -116,13 +126,14 @@ const Button = forwardRef<Animated.Pressable, ButtonProps>(
     const isDisabled = disabled || loading;
 
     return (
-      <Animated.Pressable
+      <AnimatedPressable
         ref={ref}
         style={[
           baseStyles,
           variantStyles[variant],
           sizeStyles[size],
           isDisabled && { opacity: 0.5 },
+          animatedStyle,
           style,
         ]}
         className={cn(className)}
@@ -160,7 +171,7 @@ const Button = forwardRef<Animated.Pressable, ButtonProps>(
             {rightIcon && <View>{rightIcon}</View>}
           </>
         )}
-      </Animated.Pressable>
+      </AnimatedPressable>
     );
   }
 );

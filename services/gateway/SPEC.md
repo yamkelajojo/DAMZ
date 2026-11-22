@@ -2,7 +2,7 @@
 
 **Version**: 1.0
 **Status**: Approved (Prepared but Not Active in v1)
-**Last Updated**: 2026-10-04
+**Last Updated**: 2026-11-22
 **Owner**: Admin/Developer
 
 ---
@@ -43,6 +43,8 @@ Content-Type: application/json
 
 {
   "order_id": "uuid-v4",
+  "runner_did": "did:key:z6Mk...",
+  "runner_onion_hash": "sha256-of-runner-tor-public-key",
   "amount_zar": "150.00",
   "rate_xmr_per_zar": "0.00012345",
   "expires_in_seconds": 900
@@ -53,8 +55,8 @@ Content-Type: application/json
 ```json
 {
   "subaddress": "84WsptnLmjTYQjm52SMkhQWsepprkcchNguxdyLkURTSW1WLo3tShTnCRvepijbc2X8GAKPGxJK9hfQhLHzoKSxh7y8Yqrg",
-  "amount_xmr": "0.0185175",
-  "amount_piconero": "1851750000000",
+  "amount_xmr": "0.018517500000",
+  "amount_piconero": "18517500000",
   "expires_at": 1234567890,
   "payment_id": "internal-gateway-id"
 }
@@ -70,7 +72,7 @@ GET /receive/{subaddress}
 ```json
 {
   "status": "pending" | "confirmed" | "expired",
-  "amount_received_piconero": "1851750000000",
+  "amount_received_piconero": "18517500000",
   "confirmations": 0,
   "txid": null | "abc123..."
 }
@@ -83,24 +85,51 @@ GET /receive/{subaddress}
 
 ### 3.3 Callback to Relay (Payment Confirmed)
 
-When gateway detects ≥3 confirmations, it calls the relay to notify the runner:
+The payment monitor calls the Gateway once a payment reaches ≥3 confirmations.
+It signs the exact JSON body with the configured monitor DID using
+`timestamp (little-endian i64) || nonce (UTF-8) || raw body`:
 
 ```
 POST /notify/payment
 Content-Type: application/json
-X-DAMZ-Signature: <Ed25519 signature of body by gateway DID>
+X-DAMZ-DID: <configured payment-monitor did:key>
+X-DAMZ-Timestamp: <Unix seconds>
+X-DAMZ-Nonce: <16–128 ASCII letters, digits, '-' or '_'>
+X-DAMZ-Signature: <base64 Ed25519 signature>
 
 {
   "order_id": "uuid-v4",
-  "runner_onion_hash": "sha256-of-runner-tor-pubkey",
   "subaddress": "...",
-  "txid": "abc123...",
-  "amount_piconero": "1851750000000",
+  "txid": "64-character Monero transaction hash",
+  "amount_piconero": "18517500000",
+  "confirmations": 3,
   "confirmed_at": 1234567890
 }
 ```
 
-The relay forwards this encrypted blob to the runner's onion service.
+The Gateway rejects unsigned, stale, replayed, or below-threshold callbacks. It
+looks up the Runner DID and relay recipient saved with the payment request; the
+callback cannot choose either value. The Gateway encrypts a
+`payment.confirmed` event with RFC 9180 HPKE Auth mode to the Runner's DID-bound
+X25519 key, then sends only the opaque envelope to the operator-configured
+non-onion relay HTTP origin
+at `PUT /blob/{runner_onion_hash}`. A response is successful only after the
+relay returns `202 Accepted` with a valid receipt. The Runner polls
+`GET /inbox/{runner_onion_hash}` over Tor, decrypts locally, stores the event
+ID in its encrypted payment-event database, and then acknowledges the relay
+item. The relay returns the same item until acknowledged, so a crash before
+the database write or acknowledgement causes safe redelivery. On launch Runner
+restores the latest saved event before polling, so an app close after storage
+does not hide an event already stored. The relay is still in-memory and does
+not authenticate pollers, so payment status remains the reconciliation path
+for a relay restart or a malicious acknowledgement.
+
+Notifications are disabled by default. After the authentication, key-match,
+database replay, and Rust/TypeScript interoperability gates pass, set
+`GATEWAY_PAYMENT_NOTIFICATIONS_ENABLED=true` only on an isolated development
+Gateway for physical-device smoke testing. Keep it disabled in production;
+the current payment provider and payment records remain mock-mode and
+in-memory.
 
 ---
 
@@ -207,7 +236,7 @@ Same pattern as relay (ADR-0008, ADR-0034).
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GATEWAY_PORT` | No (default 3001) | HTTP port |
+| `GATEWAY_PORT` | No (default 3001) | HTTP port (bound to loopback) |
 | `MONEROD_RPC_URL` | Yes | `http://user:pass@127.0.0.1:18081/json_rpc` |
 | `MONEROD_RPC_USER` | Yes | RPC username |
 | `MONEROD_RPC_PASS` | Yes | RPC password |
@@ -215,7 +244,11 @@ Same pattern as relay (ADR-0008, ADR-0034).
 | `VIEW_KEY_ENCRYPTED` | Yes | `age`-encrypted private view key |
 | `VIEW_KEY_PASSPHRASE` | Yes | Passphrase to decrypt view key (injected at deploy) |
 | `FEE_ADDRESS` | Yes | Admin's 5% fee collection address |
-| `RELAY_ONION_URL` | Yes | Relay URL for payment callbacks |
+| `GATEWAY_DID` | When notifications are enabled | Gateway Ed25519 `did:key` used as the HPKE sender identity |
+| `GATEWAY_PRIVATE_KEY_MULTIBASE` | When notifications are enabled | Gateway Ed25519 private key from secret storage; must match `GATEWAY_DID` |
+| `PAYMENT_MONITOR_DID` | When notifications are enabled | Trusted Ed25519 `did:key` allowed to submit callbacks |
+| `RELAY_HTTP_URL` | When notifications are enabled | Operator-configured non-onion HTTP(S) origin reachable by Gateway; restrict its reachability with deployment network policy |
+| `GATEWAY_PAYMENT_NOTIFICATIONS_ENABLED` | No (default false) | Enable encrypted relay callbacks only in an isolated development environment after automated implementation gates pass |
 | `RUST_LOG` | No | Logging level |
 
 ### 7.4 Systemd Service

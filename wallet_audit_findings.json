@@ -1,0 +1,481 @@
+﻿{
+  "audit": {
+    "scope": {
+      "packages": ["packages/core", "packages/types"],
+      "apps": ["apps/customer", "apps/runner"],
+      "nativeModules": ["react-native-mymonero-core", "SecureMemory (planned)"]
+    },
+    "timestamp": "2026-10-04"
+  },
+  "enumeration": {
+    "seedSpendKeyMnemonicOccurrences": [
+      {
+        "file": "packages/core/src/monero/MoneroWallet.ts",
+        "lines": [
+          {
+            "line": 11,
+            "context": "WalletInfo interface declares 'seed: string'",
+            "type": "interface"
+          },
+          {
+            "line": 44,
+            "context": "bridge.generateWallet({ language, networkType: 'MAINNET' }) called",
+            "type": "nativeCall"
+          },
+          {
+            "line": 48,
+            "context": "seed: result.mnemonic - SEED CROSSES NATIVE\u2192JS BOUNDARY HERE",
+            "type": "leakPoint",
+            "severity": "CRITICAL"
+          },
+          {
+            "line": 53,
+            "context": "createWalletFromSeed(seed: string, ...) - SEED ACCEPTED FROM JS HERE",
+            "type": "leakPoint",
+            "severity": "CRITICAL"
+          },
+          {
+            "line": 54,
+            "context": "bridge.seedAndKeysFromMnemonic({ mnemonic: seed, ... }) - SEED CROSSES JS\u2192NATIVE HERE",
+            "type": "leakPoint",
+            "severity": "CRITICAL"
+          },
+          {
+            "line": 59,
+            "context": "returns { ..., seed } - SEED RETURNS TO CALLER",
+            "type": "leakPoint",
+            "severity": "CRITICAL"
+          }
+        ]
+      },
+      {
+        "file": "packages/core/src/__tests__/MoneroWallet.security.test.ts",
+        "lines": [
+          {
+            "line": 13,
+            "context": "TEST_ONLY_SYNTHETIC_MNEMONIC constant defined",
+            "type": "testConstant"
+          },
+          {
+            "line": 22,
+            "context": "Mock returns mnemonic in generateWallet response",
+            "type": "mockSetup"
+          },
+          {
+            "line": 30,
+            "context": "Test EXPECTS result.not.toHaveProperty('seed') - CURRENTLY FAILS",
+            "type": "testExpectation"
+          },
+          {
+            "line": 32,
+            "context": "Test EXPECTS JSON.stringify(result) not to contain mnemonic - CURRENTLY FAILS",
+            "type": "testExpectation"
+          }
+        ]
+      },
+      {
+        "file": "packages/core/jest.setup.js",
+        "lines": [
+          {
+            "line": 17,
+            "context": "Mock generateWallet returns { address: '4test...', mnemonic: 'test seed' }",
+            "type": "mockSetup"
+          },
+          {
+            "line": 18,
+            "context": "Mock seedAndKeysFromMnemonic returns { address: '4test...' }",
+            "type": "mockSetup"
+          }
+        ]
+      },
+      {
+        "file": "packages/core/src/signal/SignalProtocolStore.ts",
+        "lines": [
+          {
+            "line": 120,
+            "context": "Generate 32-byte seed for Ed25519 - DIFFERENT DOMAIN (Signal, not Monero)",
+            "type": "unrelated",
+            "note": "Signal protocol seed, not Monero wallet seed"
+          }
+        ]
+      },
+      {
+        "file": "packages/db/src/index.ts",
+        "lines": [
+          {
+            "line": 135,
+            "context": "seedCatalogItems function - CATALOG SEEDING, not wallet seed",
+            "type": "unrelated"
+          }
+        ]
+      },
+      {
+        "file": "packages/db/scripts/validate-schema.ts",
+        "lines": [
+          {
+            "line": 69,
+            "context": "Column name check includes 'seed' - SCHEMA VALIDATION, not wallet seed",
+            "type": "unrelated"
+          }
+        ]
+      }
+    ]
+  },
+  "nativeModuleMapping": {
+    "reactNativeMymoneroCore": {
+      "package": "react-native-mymonero-core@^0.4.0",
+      "source": "https://github.com/EdgeApp/react-native-mymonero-core",
+      "interface": "WABridge-compatible (from @mymonero/mymonero-monero-client)",
+      "exportStyle": "single default export",
+      "allMethodsAsync": true,
+      "apiSurface": [
+        {
+          "name": "generateWallet",
+          "params": "{ language: string, networkType: 'MAINNET' | 'STAGENET' | 'TESTNET' }",
+          "returns": "Promise<{ address: string, mnemonic: string }>",
+          "leaksSeed": true,
+          "note": "Returns 25-word mnemonic as string to JS"
+        },
+        {
+          "name": "seedAndKeysFromMnemonic",
+          "params": "{ mnemonic: string, language: string, networkType: string }",
+          "returns": "Promise<{ address: string, ... }>",
+          "leaksSeed": false,
+          "note": "Accepts mnemonic from JS - seed crosses JS\u2192native"
+        },
+        {
+          "name": "createTransaction",
+          "params": "{ address: string, amount: string, priority: number, unlockTime: number, networkType: string }",
+          "returns": "Promise<{ signedTxHex: string, txid: string, fee: string | number }>",
+          "leaksSeed": false,
+          "note": "Signing happens in native; only tx hex returned"
+        },
+        {
+          "name": "newIntegratedAddress",
+          "params": "{ address: string, paymentId: string, networkType: string }",
+          "returns": "Promise<{ integratedAddress: string }>",
+          "leaksSeed": false
+        },
+        {
+          "name": "decodeAddress",
+          "params": "{ address: string, networkType: string }",
+          "returns": "Promise<{ isValid: boolean, isSubaddress: boolean, networkType: string }>",
+          "leaksSeed": false
+        },
+        {
+          "name": "estimateTxFee",
+          "params": "{ amount: string, priority: number, networkType: string }",
+          "returns": "Promise<{ fee: string | number }>",
+          "leaksSeed": false
+        },
+        {
+          "name": "addressAndKeysFromSeed",
+          "params": "{ seed: string, networkType: string }",
+          "returns": "Promise<{ address: string, spendKey: string, viewKey: string }>",
+          "leaksSeed": true,
+          "note": "Returns spendKey and viewKey to JS - CRITICAL LEAK"
+        },
+        {
+          "name": "mnemonicFromSeed",
+          "params": "{ seed: string }",
+          "returns": "Promise<{ mnemonic: string }>",
+          "leaksSeed": true,
+          "note": "Converts seed to mnemonic - returns to JS"
+        },
+        {
+          "name": "generateKeyImage",
+          "params": "{ txPublicKey: string, viewKey: string, spendKey: string, outputIndex: number }",
+          "returns": "Promise<{ keyImage: string }>",
+          "leaksSeed": false,
+          "note": "Requires spendKey/viewKey as params - must NOT be called from JS"
+        },
+        {
+          "name": "isValidKeys",
+          "params": "{ address: string, viewKey: string, spendKey: string }",
+          "returns": "Promise<{ isValid: boolean }>",
+          "leaksSeed": false,
+          "note": "Requires keys as params - must NOT be called from JS"
+        },
+        {
+          "name": "compareMnemonics",
+          "params": "{ mnemonic1: string, mnemonic2: string }",
+          "returns": "Promise<{ equal: boolean }>",
+          "leaksSeed": false,
+          "note": "Accepts mnemonics from JS"
+        },
+        {
+          "name": "generatePaymentId",
+          "params": "{}",
+          "returns": "Promise<{ paymentId: string }>",
+          "leaksSeed": false
+        },
+        {
+          "name": "isIntegratedAddress",
+          "params": "{ address: string }",
+          "returns": "Promise<{ isIntegrated: boolean }>",
+          "leaksSeed": false
+        },
+        {
+          "name": "isSubaddress",
+          "params": "{ address: string }",
+          "returns": "Promise<{ isSubaddress: boolean }>",
+          "leaksSeed": false
+        }
+      ]
+    },
+    "secureMemory": {
+      "status": "PLANNED - NOT YET IMPLEMENTED",
+      "adr": "ADR-0028",
+      "purpose": "Wallet-secret boundary; all seed/spendKey/viewKey/PIN operations stay native",
+      "platform": {
+        "ios": "Keychain + Secure Enclave, biometric-only access",
+        "android": "Keystore + StrongBox (API 28+), biometric-only access"
+      },
+      "plannedApi": "See proposedNativeApi below",
+      "currentImplementation": "None - MoneroWallet.ts is noncompliant scaffold"
+    },
+    "expoSecureStore": {
+      "status": "USED FOR NON-WALLET KEYS ONLY",
+      "note": "Per ADR-0028, wallet secrets MUST NOT use expo-secure-store (JS-facing)"
+    }
+  },
+  "leakPathDiagram": {
+    "description": "Current seed leak paths in MoneroWallet.ts",
+    "paths": [
+      {
+        "id": "LEAK-001",
+        "direction": "NATIVE \u2192 JAVASCRIPT",
+        "entryPoint": "react-native-mymonero-core.generateWallet()",
+        "bridgeCallLine": "MoneroWallet.ts:44",
+        "leakLine": "MoneroWallet.ts:48",
+        "code": "seed: result.mnemonic",
+        "dataFlow": [
+          "Native C++ generates wallet",
+          "Returns { address, mnemonic } via JSI bridge",
+          "MoneroWallet.generateWallet() receives result",
+          "Line 48: extracts result.mnemonic \u2192 assigns to WalletInfo.seed",
+          "Returns WalletInfo { address, seed, restoreHeight } to JS caller",
+          "Seed now exists as JavaScript string in heap"
+        ],
+        "consumers": [
+          "Any caller of MoneroWallet.getInstance().generateWallet()",
+          "UI components displaying recovery phrase",
+          "Backup/recovery flows (if implemented)",
+          "Test suite (MoneroWallet.security.test.ts expects NO seed)"
+        ]
+      },
+      {
+        "id": "LEAK-002",
+        "direction": "JAVASCRIPT \u2192 NATIVE",
+        "entryPoint": "MoneroWallet.createWalletFromSeed(seed: string, ...)",
+        "leakLine": "MoneroWallet.ts:53-54",
+        "code": "bridge.seedAndKeysFromMnemonic({ mnemonic: seed, ... })",
+        "dataFlow": [
+          "JS caller passes seed string (from backup entry, clipboard, etc.)",
+          "createWalletFromSeed receives seed as string parameter",
+          "Line 54: passes seed to bridge.seedAndKeysFromMnemonic()",
+          "Seed crosses JSI bridge into native memory",
+          "Native code derives keys from mnemonic"
+        ],
+        "consumers": [
+          "Wallet restore/recovery UI",
+          "Migration from existing wallet",
+          "Test suite"
+        ]
+      },
+      {
+        "id": "LEAK-003",
+        "direction": "RETURN TO CALLER",
+        "entryPoint": "MoneroWallet.createWalletFromSeed() return",
+        "leakLine": "MoneroWallet.ts:59",
+        "code": "return { address: result.address, seed, restoreHeight }",
+        "dataFlow": [
+          "Seed parameter already in JS scope",
+          "Function returns same seed in WalletInfo object",
+          "Caller receives seed again - redundant exposure"
+        ],
+        "consumers": [
+          "Same as LEAK-002 callers"
+        ]
+      }
+    ],
+    "downstreamConsumers": [
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 21,
+        "usage": "export { MoneroWallet } from './monero/MoneroWallet'",
+        "impact": "Exports leaky API to all consumers"
+      },
+      {
+        "file": "apps/customer/package.json",
+        "line": 42,
+        "usage": "depends on @damz/core which exports MoneroWallet",
+        "impact": "Customer app can import and use leaky wallet"
+      },
+      {
+        "file": "apps/runner/package.json",
+        "line": 42,
+        "usage": "depends on @damz/core which exports MoneroWallet",
+        "impact": "Runner app can import and use leaky wallet"
+      }
+    ]
+  },
+  "proposedNativeApi": {
+    "moduleName": "SecureMemory",
+    "platform": ["ios", "android"],
+    "language": "C++ (JSI/TurboModule) + Swift/ObjC (iOS) + Kotlin (Android)",
+    "principle": "No wallet secret (seed, spendKey, privateViewKey, PIN) ever crosses into JavaScript/JSI as managed value",
+    "functionSignatures": [
+      {
+        "name": "generateWallet",
+        "signature": "generateWallet(config: { language: string; networkType: 'MAINNET' | 'STAGENET' | 'TESTNET'; biometricPrompt: string }): Promise<{ address: string; restoreHeight: number }>",
+        "description": "Generates new wallet; seed written directly to Keychain/Keystore; returns only public metadata",
+        "jsVisibleReturn": "{ address: string, restoreHeight: number }",
+        "nativeOnly": ["seed (25-word mnemonic) written to secure storage", "spendKey derived and stored in secure storage"]
+      },
+      {
+        "name": "restoreWallet",
+        "signature": "restoreWallet(config: { mnemonicEntry: NativeMnemonicEntry; restoreHeight: number; networkType: string; biometricPrompt: string }): Promise<{ address: string; restoreHeight: number }>",
+        "description": "Restores wallet from mnemonic entered via native UI; never receives mnemonic as JS string",
+        "jsVisibleReturn": "{ address: string, restoreHeight: number }",
+        "nativeOnly": ["mnemonic entered via native PIN/biometric UI", "seed written to secure storage", "keys derived in native"],
+        "note": "NativeMnemonicEntry is opaque handle from native UI, not JS string"
+      },
+      {
+        "name": "createSubaddress",
+        "signature": "createSubaddress(config: { accountIndex: number; label: string }): Promise<{ address: string; index: number }>",
+        "description": "Derives subaddress from primary address in secure storage",
+        "jsVisibleReturn": "{ address: string, index: number }",
+        "nativeOnly": ["reads primary address from secure storage", "derives subaddress"]
+      },
+      {
+        "name": "createTransaction",
+        "signature": "createTransaction(config: { destinationAddress: string; amountPiconero: string; priority: number; unlockTime: number; biometricPrompt: string }): Promise<{ txHex: string; txid: string; fee: string }>",
+        "description": "Creates and signs transaction; spend key never leaves native",
+        "jsVisibleReturn": "{ txHex: string, txid: string, fee: string }",
+        "nativeOnly": ["retrieves spend key from secure storage", "signs transaction", "zeroizes key buffer after use"]
+      },
+      {
+        "name": "getPrimaryAddress",
+        "signature": "getPrimaryAddress(): Promise<string>",
+        "description": "Returns primary address from secure storage",
+        "jsVisibleReturn": "string (address only)",
+        "nativeOnly": ["reads address from secure storage"]
+      },
+      {
+        "name": "getRestoreHeight",
+        "signature": "getRestoreHeight(): Promise<number>",
+        "description": "Returns wallet restore height",
+        "jsVisibleReturn": "number",
+        "nativeOnly": ["reads from secure storage or local prefs"]
+      },
+      {
+        "name": "setRestoreHeight",
+        "signature": "setRestoreHeight(height: number): Promise<void>",
+        "description": "Persists restore height",
+        "jsVisibleReturn": "void",
+        "nativeOnly": ["writes to secure storage or local prefs"]
+      },
+      {
+        "name": "exportRecoveryPhrase",
+        "signature": "exportRecoveryPhrase(config: { biometricPrompt: string; displayCallback: (wordIndex: number, word: string) => void }): Promise<void>",
+        "description": "Displays 25-word recovery phrase via native UI callback; phrase never enters JS",
+        "jsVisibleReturn": "void (completion only)",
+        "nativeOnly": ["reads seed from secure storage", "displays words one-at-a-time via callback", "zeroizes buffer after display"]
+      },
+      {
+        "name": "verifyRecoveryPhrase",
+        "signature": "verifyRecoveryPhrase(config: { biometricPrompt: string; entryCallback: (wordIndex: number) => string }): Promise<boolean>",
+        "description": "Verifies user-entered recovery phrase matches stored seed; phrase never enters JS",
+        "jsVisibleReturn": "boolean (match result only)",
+        "nativeOnly": ["reads seed from secure storage", "compares against native-entered words", "zeroizes buffers"]
+      },
+      {
+        "name": "estimateFee",
+        "signature": "estimateFee(config: { amountPiconero: string; priority: number }): Promise<string>",
+        "description": "Estimates transaction fee",
+        "jsVisibleReturn": "string (fee in piconero)",
+        "nativeOnly": ["uses fee estimation algorithm, no secrets needed"]
+      },
+      {
+        "name": "decodeAddress",
+        "signature": "decodeAddress(address: string): Promise<{ isValid: boolean; isSubaddress: boolean; networkType: string }>",
+        "description": "Validates address format",
+        "jsVisibleReturn": "{ isValid: boolean, isSubaddress: boolean, networkType: string }",
+        "nativeOnly": ["pure function, no secrets"]
+      },
+      {
+        "name": "hasWallet",
+        "signature": "hasWallet(): Promise<boolean>",
+        "description": "Checks if wallet exists in secure storage",
+        "jsVisibleReturn": "boolean",
+        "nativeOnly": ["checks Keychain/Keystore for wallet entry"]
+      },
+      {
+        "name": "deleteWallet",
+        "signature": "deleteWallet(config: { biometricPrompt: string }): Promise<void>",
+        "description": "Securely deletes wallet from Keychain/Keystore with zeroization",
+        "jsVisibleReturn": "void",
+        "nativeOnly": ["deletes seed, spendKey, viewKey from secure storage", "secure_memset on all buffers"]
+      },
+      {
+        "name": "getPrivateViewKey",
+        "signature": "getPrivateViewKey(config: { pinEntry: NativePinEntry; biometricPrompt?: string }): Promise<{ viewKey: OpaqueHandle }>",
+        "description": "Returns opaque handle to private view key for gateway registration; key never enters JS",
+        "jsVisibleReturn": "{ viewKey: OpaqueHandle } - opaque token for native-only use",
+        "nativeOnly": ["PIN entry via native UI", "HKDF derivation", "viewKey stays in native memory", "OpaqueHandle passed to gateway registration native code"],
+        "note": "Optional per ADR-0028; PIN-derived HKDF exception only inside SecureMemory"
+      },
+      {
+        "name": "syncWithGateway",
+        "signature": "syncWithGateway(config: { gatewayOnion: string; viewKeyHandle: OpaqueHandle; lastSyncHeight: number }): Promise<{ newHeight: number; transactions: Array<{ txid: string; amount: string; timestamp: number; confirmations: number }> }>",
+        "description": "Syncs wallet with AcceptXMR gateway using opaque view key handle",
+        "jsVisibleReturn": "{ newHeight: number, transactions: [...] }",
+        "nativeOnly": ["uses viewKeyHandle for gateway communication", "no keys exposed to JS"]
+      }
+    ],
+    "opaqueTypes": [
+      {
+        "name": "NativeMnemonicEntry",
+        "description": "Opaque handle for mnemonic entry via native UI; implemented as native class with no JS-accessible properties"
+      },
+      {
+        "name": "NativePinEntry",
+        "description": "Opaque handle for PIN entry via native UI; implemented as native class with no JS-accessible properties"
+      },
+      {
+        "name": "OpaqueHandle",
+        "description": "Generic opaque token for native-only secrets; cannot be serialized, logged, or inspected from JS"
+      }
+    ],
+    "securityRequirements": [
+      "All secret buffers allocated with mlock() where available",
+      "secure_memset() on all secret buffers after each operation",
+      "Biometric authentication required for seed/spendKey operations (no PIN fallback)",
+      "PIN only for optional private view key, entered via native UI",
+      "No JSI value wrapping of secret material",
+      "No console.log or debug output of secrets",
+      "Native UI for recovery phrase display/entry (not React Native components)"
+    ]
+  },
+  "complianceGap": {
+    "currentState": "NONCOMPLIANT",
+    "blockingIssues": [
+      "MoneroWallet.ts returns seed as JS string (line 48)",
+      "MoneroWallet.ts accepts seed as JS string parameter (line 53)",
+      "WalletInfo interface exposes seed property (line 11)",
+      "react-native-mymonero-core methods that leak seeds are callable from JS",
+      "SecureMemory module not implemented",
+      "No native UI for recovery phrase display/entry"
+    ],
+    "requiredActions": [
+      "Implement SecureMemory native module per proposedNativeApi",
+      "Replace MoneroWallet.ts with thin JS facade calling SecureMemory only",
+      "Remove seed/spendKey/viewKey from all JS-facing types",
+      "Audit all callers of MoneroWallet for migration",
+      "Implement native recovery phrase UI (iOS: SwiftUI/Secure Enclave; Android: Jetpack Compose/StrongBox)",
+      "Verify mlock/secure_memset behavior on target platforms (OQ-SEC-MEM-001)",
+      "Define migration path for any existing Keychain/Keystore items (OQ-SEC-MEM-002)"
+    ]
+  }
+}

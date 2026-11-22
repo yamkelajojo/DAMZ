@@ -8,7 +8,12 @@
 
 import { openDatabaseSync } from 'expo-sqlite';
 import * as SecureStore from 'expo-secure-store';
-import * as Crypto from 'expo-crypto';
+import { IdentityKeyPair as LibsignalIdentityKeyPair } from 'react-native-libsignal-client';
+
+const DB_NAME = 'damz_signal.db';
+
+/** Signal registration IDs are 16-bit values; 0 is reserved per the spec. */
+const MAX_REGISTRATION_ID = 16380;
 
 export interface IdentityKeyPair {
   publicKey: string;
@@ -46,10 +51,42 @@ export class SignalProtocolStore {
 
   constructor(dbKey: string) {
     this.dbKey = dbKey;
-    this.db = openDatabaseSync('damz_signal.db', {
-      cipherKey: dbKey,
-    });
+    // expo-sqlite silently ignores unknown open options: its native
+    // `OpenDatabaseOptions` records have no `key` field and the C++ binding
+    // never calls `sqlite3_key`. Passing `{ key: dbKey }` here (as the previous
+    // implementation did, via `as any`) left the Signal database — identity
+    // keys, sessions, prekeys, sender keys — stored in plaintext.
+    this.db = openDatabaseSync(DB_NAME);
+    this.applyEncryptionKey();
     this.initTables();
+  }
+
+  /**
+   * Applies the SQLCipher key and verifies encryption is actually available.
+   *
+   * `PRAGMA key` must be the first statement on the connection; once a page has
+   * been read or written SQLCipher refuses to key the file. The key is supplied
+   * as a raw 32-byte hex blob (`x'…'`) matching `getDatabaseKey()` in @damz/db.
+   */
+  private applyEncryptionKey(): void {
+    const hexKey = this.dbKey.trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(hexKey)) {
+      throw new Error(
+        'SignalProtocolStore: the SQLCipher key must be a 64-character hex string (32 bytes).',
+      );
+    }
+
+    this.db.execSync(`PRAGMA key = "x'${hexKey}'"`);
+
+    const row = this.db.getFirstSync<Record<string, unknown>>('PRAGMA cipher_version');
+    const cipherVersion = row ? Object.values(row)[0] : undefined;
+    if (!cipherVersion) {
+      throw new Error(
+        'SignalProtocolStore: SQLCipher is not available in this expo-sqlite build, so Signal ' +
+          'sessions would be stored unencrypted. Enable the expo-sqlite plugin option ' +
+          '`useSQLCipher: true` and rebuild the app.',
+      );
+    }
   }
 
   private initTables(): void {
@@ -116,17 +153,42 @@ export class SignalProtocolStore {
     }
   }
 
-  private async generateIdentityKeyPair(): Promise<IdentityKeyPair> {
-    // Generate 32-byte seed for Ed25519
-    const seed = await Crypto.getRandomBytesAsync(32);
+  private generateIdentityKeyPair(): IdentityKeyPair {
+    // Use libsignal's own Ed25519 identity key pair so the serialized public and
+    // private keys are exactly the format the Signal protocol expects.
+    //
+    // Security: the previous implementation derived a 32-byte seed and returned
+    // it as BOTH keys, so `publicKey === privateKey`. Publishing the "public"
+    // key therefore disclosed the private key to every peer.
+    const keyPair = LibsignalIdentityKeyPair.generate();
 
-    // In production, use a proper Ed25519 implementation
-    // For now, we use the seed as both public/private (libsignal expects specific format)
-    // This would be replaced with actual @noble/ed25519 or similar
-    const publicKey = Buffer.from(seed).toString('base64');
-    const privateKey = Buffer.from(seed).toString('base64'); // Simplified
+    return {
+      publicKey: SignalProtocolStore.toBase64(keyPair.publicKey.serialized),
+      privateKey: SignalProtocolStore.toBase64(keyPair.privateKey.serialized),
+    };
+  }
 
-    return { publicKey, privateKey };
+  /**
+   * Dependency-free base64 encoder.
+   *
+   * React Native has no global `Buffer`, so this module cannot rely on it — and
+   * it must run identically under Node in tests.
+   */
+  private static toBase64(bytes: Uint8Array): string {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 3) {
+      const remaining = bytes.length - i;
+      const b0 = bytes[i];
+      const b1 = remaining > 1 ? bytes[i + 1] : 0;
+      const b2 = remaining > 2 ? bytes[i + 2] : 0;
+
+      out += alphabet[b0 >> 2];
+      out += alphabet[((b0 & 0x03) << 4) | (b1 >> 4)];
+      out += remaining > 1 ? alphabet[((b1 & 0x0f) << 2) | (b2 >> 6)] : '=';
+      out += remaining > 2 ? alphabet[b2 & 0x3f] : '=';
+    }
+    return out;
   }
 
   async getLocalRegistrationId(): Promise<number> {
@@ -139,8 +201,10 @@ export class SignalProtocolStore {
         return parseInt(stored, 10);
       }
 
-      // Generate random 16-bit registration ID (1-16380 per Signal spec)
-      const regId = Math.floor(Math.random() * 16380) + 1;
+      // Generate random 16-bit registration ID (1-16380 per Signal spec).
+      // Must use a CSPRNG: `Math.random()` is predictable, and the previous
+      // implementation used it, making IDs guessable and collision-prone.
+      const regId = SignalProtocolStore.randomRegistrationId();
       await SecureStore.setItemAsync(REGISTRATION_ID_KEY, regId.toString(), {
         keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
       });
@@ -149,6 +213,32 @@ export class SignalProtocolStore {
     } catch (error) {
       throw new Error(`Failed to get registration ID: ${error}`);
     }
+  }
+
+  /**
+   * Generates a registration ID from a cryptographically secure source.
+   *
+   * Fails loud when no CSPRNG is present rather than falling back to
+   * `Math.random()`: a predictable registration ID is guessable and collides
+   * across devices.
+   */
+  private static randomRegistrationId(): number {
+    const webCrypto = (
+      globalThis as {
+        crypto?: { getRandomValues?: (array: Uint32Array) => Uint32Array };
+      }
+    ).crypto;
+
+    if (!webCrypto?.getRandomValues) {
+      throw new Error(
+        'SignalProtocolStore: no CSPRNG available (crypto.getRandomValues is missing). ' +
+          'Refusing to derive a registration ID from a non-cryptographic source.',
+      );
+    }
+
+    const entropy = new Uint32Array(1);
+    webCrypto.getRandomValues(entropy);
+    return (entropy[0] % MAX_REGISTRATION_ID) + 1;
   }
 
   // =========================================================================
@@ -244,8 +334,17 @@ export class SignalProtocolStore {
 
   async storeSenderKey(senderKeyId: string, key: Record<string, unknown>): Promise<void> {
     try {
-      // Generate a key ID if not provided in the key object
-      const keyId = (key.keyId as number) ?? Math.floor(Math.random() * 1000000);
+      // The numeric key id belongs to the record itself. Prefer the module's
+      // `SenderKeyRecord.senderKeyId`, accept libsignal's `keyId`, and fail
+      // loudly rather than inventing a non-deterministic id.
+      const keyId =
+        (key.senderKeyId as number | undefined) ?? (key.keyId as number | undefined);
+
+      if (typeof keyId !== 'number') {
+        throw new Error(
+          'storeSenderKey: record is missing a numeric senderKeyId'
+        );
+      }
 
       this.db.runSync(
         `INSERT OR REPLACE INTO signal_sender_keys (sender_key_id, key_id, key_data, created_at)
@@ -291,7 +390,11 @@ export class SignalProtocolStore {
       );
 
       if (!row) {
-        // First encounter - trust on first use (TOFU)
+        // Trust on first use (TOFU): persist the key so that a later change in
+        // the peer's identity key is detectable. Returning true without saving
+        // would make every future lookup re-trust the caller and silently
+        // defeat identity-change (MITM) detection.
+        await this.saveIdentity(identifier, identityKey);
         return true;
       }
 

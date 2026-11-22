@@ -1,0 +1,270 @@
+{
+  "diagnostics": [
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 11,
+      "errorCode": "TS2307",
+      "message": "Cannot find module 'fs' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Install @types/node (provides Node.js built-in module types)",
+      "underlyingCause": "Node.js built-in modules require @types/node for TypeScript compilation"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 12,
+      "errorCode": "TS2307",
+      "message": "Cannot find module 'path' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Node.js built-in modules require @types/node for TypeScript compilation"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 14,
+      "errorCode": "TS2339",
+      "message": "Property 'dir' does not exist on type 'ImportMeta'",
+      "category": "bun-specific",
+      "fix": "Change `import.meta.dir` to `import.meta.dirname` (Bun-specific API)",
+      "underlyingCause": "Bun provides `import.meta.dirname` not `import.meta.dir`; this is a Bun vs Node.js API difference"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 160,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node (provides global console, process, Buffer)",
+      "underlyingCause": "TypeScript with 'lib': ['ES2022'] doesn't include Node.js globals; need @types/node"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 169,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Same as above"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 170,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Same as above"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 174,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Same as above"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 175,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Same as above"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 179,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Same as above"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 182,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Same as above"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 184,
+      "errorCode": "TS2580",
+      "message": "Cannot find name 'process'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Node.js globals require @types/node"
+    },
+    {
+      "file": "scripts/validate-schema.ts",
+      "line": 34,
+      "errorCode": "ADR-0043",
+      "message": "Schema validator uses regex to parse SQL CREATE TABLE instead of inspecting actual TypeScript appSchema(...)",
+      "category": "schema-validator",
+      "fix": "Rewrite validator to import and inspect the actual schema object from '../schemas/schema' (TABLE_SCHEMA_SPECS array) rather than regex-parsing SQL",
+      "underlyingCause": "ADR-0043 requires the validator to inspect the actual TypeScript appSchema(...) structure; regex parsing of SQL is not acceptable"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 8,
+      "errorCode": "TS2307",
+      "message": "Cannot find module '@nozbe/watermelondb' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install` to install @nozbe/watermelondb@^0.27.0 (includes types)",
+      "underlyingCause": "Dependencies not installed; package.json declares @nozbe/watermelondb as dependency"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 9,
+      "errorCode": "TS2307",
+      "message": "Cannot find module '@nozbe/watermelondb/adapters/sqlite' or its corresponding type declarations",
+      "category": "adapter-choice",
+      "fix": "Run `bun install`; the correct adapter for Expo SQLite + SQLCipher is `@nozbe/watermelondb/adapters/sqlite` (already correctly imported)",
+      "underlyingCause": "Dependencies not installed; this IS the right adapter for expo-sqlite with SQLCipher (category a: fixed by choosing the right adapter - already correct)"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 13,
+      "errorCode": "TS2307",
+      "message": "Cannot find module 'expo-secure-store' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install` to install expo-secure-store@~57.0.0",
+      "underlyingCause": "Dependencies not installed"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 14,
+      "errorCode": "TS2307",
+      "message": "Cannot find module 'expo-crypto' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install` to install expo-crypto@~57.0.0",
+      "underlyingCause": "Dependencies not installed"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 36,
+      "errorCode": "TS2580",
+      "message": "Cannot find name 'Buffer'",
+      "category": "missing-deps",
+      "fix": "Install @types/node (provides Buffer global)",
+      "underlyingCause": "Buffer is a Node.js global; TypeScript needs @types/node"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 57,
+      "errorCode": "TS7006",
+      "message": "Parameter 'error' implicitly has an 'any' type",
+      "category": "implicit-any",
+      "fix": "Add explicit type: `onSetUpError: (error: Error) => {`",
+      "underlyingCause": "TypeScript strict mode requires explicit parameter types; the adapter callback receives an Error"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 58,
+      "errorCode": "TS2584",
+      "message": "Cannot find name 'console'",
+      "category": "missing-deps",
+      "fix": "Install @types/node",
+      "underlyingCause": "Node.js globals require @types/node"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 119,
+      "errorCode": "TS7006",
+      "message": "Parameter 'q' implicitly has an 'any' type",
+      "category": "query-callback-typing",
+      "fix": "Type the query callback parameter: `.query((q: Query<Record>) => q.where(...))` or use the typed QueryBuilder from WatermelonDB (category b: fixed by query callback typing)",
+      "underlyingCause": "WatermelonDB query builder callbacks need explicit Query type parameter for proper inference"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 151,
+      "errorCode": "TS7006",
+      "message": "Parameter 'record' implicitly has an 'any' type",
+      "category": "catalog-model-generics",
+      "fix": "Type the create callback: `.create((record: CatalogItem) => {` using the CatalogItem model class (category c: fixed by catalog model generics)",
+      "underlyingCause": "WatermelonDB collection.create() callback receives a model instance; needs explicit model type for field assignment inference"
+    },
+    {
+      "file": "src/index.ts",
+      "line": 157,
+      "errorCode": "TS7006",
+      "message": "Parameter 'record' implicitly has an 'any' type",
+      "category": "catalog-model-generics",
+      "fix": "Type the create callback: `.create((record: CatalogItem) => {` (category c: fixed by catalog model generics)",
+      "underlyingCause": "Same as above - model type needed for field inference"
+    },
+    {
+      "file": "src/migrations/index.ts",
+      "line": 1,
+      "errorCode": "TS2307",
+      "message": "Cannot find module '@nozbe/watermelondb/Schema/migrations' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install` to install @nozbe/watermelondb (includes Schema/migrations)",
+      "underlyingCause": "Dependencies not installed"
+    },
+    {
+      "file": "src/models/index.ts",
+      "line": 8,
+      "errorCode": "TS2307",
+      "message": "Cannot find module '@nozbe/watermelondb' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install`",
+      "underlyingCause": "Dependencies not installed"
+    },
+    {
+      "file": "src/models/index.ts",
+      "line": 9,
+      "errorCode": "TS2307",
+      "message": "Cannot find module '@nozbe/watermelondb/decorators' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install`",
+      "underlyingCause": "Dependencies not installed"
+    },
+    {
+      "file": "src/models/index.ts",
+      "line": 10,
+      "errorCode": "TS2307",
+      "message": "Cannot find module '@nozbe/watermelondb/Model' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install`",
+      "underlyingCause": "Dependencies not installed"
+    },
+    {
+      "file": "src/schemas/schema.ts",
+      "line": 8,
+      "errorCode": "TS2307",
+      "message": "Cannot find module '@nozbe/watermelondb' or its corresponding type declarations",
+      "category": "missing-deps",
+      "fix": "Run `bun install`",
+      "underlyingCause": "Dependencies not installed"
+    }
+  ],
+  "summary": {
+    "totalErrors": 216,
+    "byCategory": {
+      "missing-deps": 184,
+      "jest-missing-types": 12,
+      "bun-specific": 1,
+      "adapter-choice": 1,
+      "query-callback-typing": 1,
+      "catalog-model-generics": 2,
+      "implicit-any": 5,
+      "schema-validator-adr0043": 1
+    },
+    "notes": [
+      "184 errors (85%) are due to missing dependencies (bun install not run) - these resolve after installation",
+      "12 errors are missing @types/jest for test files - resolves after installing @types/jest",
+      "1 Bun-specific error: import.meta.dir to import.meta.dirname in validate-schema.ts",
+      "1 adapter choice error (already correct - SQLiteAdapter is right for expo-sqlite + SQLCipher)",
+      "1 query callback typing error at src/index.ts:119 - needs explicit Query type parameter",
+      "2 catalog model generics errors at src/index.ts:151,157 - need explicit CatalogItem type in create callbacks",
+      "5 implicit any errors - need explicit parameter types",
+      "1 ADR-0043 violation: schema validator must inspect TypeScript appSchema(...) not regex-parse SQL"
+    ]
+  }
+}

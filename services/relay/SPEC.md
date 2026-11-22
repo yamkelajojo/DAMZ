@@ -1,21 +1,21 @@
 # Relay Service Specification
 
-**Version**: 1.0
+**Version**: 1.1
 **Status**: Approved
-**Last Updated**: 2026-10-04
+**Last Updated**: 2026-11-22
 **Owner**: Admin/Developer
 
 ---
 
 ## 1. Overview
 
-The relay is a discardable, minimal Tor-hidden service that accepts encrypted blobs, stores them in memory with TTL, and forwards on retrieval. No logs, no persistence, no identity mapping. Multiple community instances can run the same binary.
+The relay is a discardable, minimal HTTP service designed to sit behind a separately managed Tor onion service. It accepts encrypted blobs, stores them in bounded memory with TTL, and forwards them on retrieval. It has no disk persistence or identity mapping. Multiple community instances can run the same binary.
 
 **Design Principles**:
 - **Zero knowledge**: Relay sees only encrypted blobs + recipient onion hashes
 - **Ephemeral**: In-memory only, no disk persistence
 - **Replaceable**: Any community member can deploy; clients discover via IPNS
-- **Minimal**: ~200 lines Rust (Axum + Tokio + Arti)
+- **Minimal**: bounded in-memory Axum service; Tor is configured separately
 
 ---
 
@@ -29,17 +29,46 @@ PUT /blob/{recipient_onion_hash}
 ```
 - **Path parameter**: `recipient_onion_hash` = SHA256(recipient_tor_public_key) (32 bytes, hex encoded)
 - **Headers**:
-  - `X-Expiry`: TTL in seconds (required)
+  - `X-Expiry`: TTL in seconds (required; from 1 through `MAX_TTL_SECONDS`)
   - `Content-Type`: `application/octet-stream`
-- **Body**: Encrypted blob (Signal Protocol envelope, max 64 KB)
+- **Body**: Already encrypted application envelope (max `MAX_BLOB_SIZE`)
 - **Response**: `202 Accepted`
   ```json
-  { "blob_id": "uuid-v4", "expires_at": 1234567890 }
+  { "blob_id": "uuid-v4", "expires_at": 1795392000 }
   ```
 - **Error codes**:
-  - `400 Bad Request`: Missing X-Expiry, blob too large (>64KB), invalid onion hash format
-  - `413 Payload Too Large`: Blob exceeds 64 KB limit
-  - `503 Service Unavailable`: Memory queue full (backpressure)
+  - `400 Bad Request`: Missing/invalid X-Expiry or recipient hash
+  - `413 Payload Too Large`: Blob exceeds `MAX_BLOB_SIZE`
+  - `503 Service Unavailable`: A global, per-recipient, or total-byte limit is full
+
+#### Pull Recipient Inbox
+```
+GET /inbox/{recipient_onion_hash}
+```
+- Uses the same SHA256 recipient hash supplied to `PUT /blob/{recipient_onion_hash}`.
+- Returns the oldest unexpired blob without deleting it.
+- **Response**: `200 OK`, JSON with `blob_id` and `payload_base64` fields. The
+  decoded payload is the original opaque encrypted blob.
+- **Empty response**: `204 No Content` when no pending blob exists.
+- The recipient hash is an address, not a secret. The relay does not authenticate
+  pollers; end-to-end encryption protects message contents.
+
+#### Acknowledge Inbox Blob
+```
+POST /inbox/{recipient_onion_hash}/ack/{blob_id}
+```
+- The recipient acknowledges only after authenticating and durably handling
+  the blob. The relay deletes it only if the ID belongs to that recipient.
+- **Response**: `204 No Content`, including for an unknown ID or an ID belonging
+  to a different recipient, so the endpoint does not reveal queue membership.
+- The relay redelivers until acknowledgement, keeping the unacknowledged item
+  at the front of the FIFO queue.
+  A recipient crash before its database commit or acknowledgement causes
+  redelivery; the app's durable event-ID store makes that redelivery safe.
+- A poller that knows the public recipient hash can read the returned blob ID
+  and issue an acknowledgement, so this does not authenticate pollers or protect
+  availability against an active attacker. Relay restarts also lose all
+  in-memory items.
 
 #### Retrieve Blob
 ```
@@ -51,17 +80,26 @@ GET /blob/{blob_id}
   - Headers: `Content-Type: application/octet-stream`
 - **Behavior**: Blob is **deleted immediately after successful retrieval** (or after expiry)
 - **Error codes**:
-  - `404 Not Found`: Blob ID not found or already retrieved/expired
-  - `410 Gone`: Blob expired before retrieval
+  - `404 Not Found`: Blob ID is unknown, already retrieved, or was removed by expiry cleanup
+  - `410 Gone`: Blob is expired and still present when retrieval is attempted
 
 ### 2.2 Message Format
 
-The relay is agnostic to the blob content. For DAMZ, blobs are Signal Protocol envelopes:
+The relay is agnostic to the blob content. DAMZ sends end-to-end encrypted
+application envelopes through it:
 
 ```
-Blob = Signal Protocol Envelope (ciphertext + metadata)
+Chat: Signal Protocol envelope
+Payment notification: HPKE Auth envelope
 Max size: 64 KB
 ```
+
+The mobile `RelayClient` sends an already encrypted envelope over the app's Tor
+HTTP client, polls the recipient inbox, and acknowledges only after the caller
+has durably handled the returned blob. It does not encrypt or decrypt. Relay
+requests must target an onion-service URL; the client rejects clearnet relay
+URLs. The envelope remains opaque to the relay and is transported as a UTF-8
+string by the current native Tor API.
 
 ### 2.3 Parameters
 
@@ -70,8 +108,11 @@ Max size: 64 KB
 | Recipient ID | SHA256(Tor public key) | Relay cannot map to identity |
 | Chat message TTL | 24h (86,400s) | Covers offline delivery window |
 | Proof key TTL | 7d (604,800s) | Allows delayed proof retrieval |
-| Blob size limit | 64 KB | Covers Signal envelope + proof key |
-| Max concurrent blobs | 10,000 per relay | Memory bound (~640 MB worst case) |
+| Blob size limit | 64 KB | Covers encrypted chat and payment envelopes |
+| Max concurrent blobs | 10,000 per relay | Bounds queued blob count |
+| Max blobs per recipient | 1,000 | Prevents one inbox from using every blob slot |
+| Max total in-memory payload | 256 MiB | Hard byte bound independent of blob count |
+| Max blob TTL | 7 days | Limits retention even if a client requests a long expiry |
 | Padding | None (v1) | Metadata leak acceptable for v1 |
 
 ---
@@ -80,22 +121,20 @@ Max size: 64 KB
 
 | Scenario | Behavior |
 |----------|----------|
-| Relay restarts mid-delivery | All in-memory blobs lost. Senders retry with exponential backoff (1s, 2s, 4s... max 60s, jitter ±10%). Recipients never receive — sender must re-send. |
-| Queue full (10,000 blobs) | Return `503 Service Unavailable`. Client retries with backoff. |
+| Relay restarts mid-delivery | All in-memory blobs are lost, including unacknowledged items. A sender must enqueue again; the current relay has no persistence or replication. |
+| Queue full (global, per-recipient, or byte limit) | Return `503 Service Unavailable`. Client retries with backoff. |
 | Blob expires before retrieval | Return `410 Gone` on GET. Sender notified via application-layer timeout. |
-| Network partition | Tor handles circuit rotation. Client detects via control port, re-establishes connections. |
+| Network partition | The native Tor transport reports request failures. Runner retries inbox polling after 30 seconds and when foregrounded; an enqueue caller must retry with a newly signed callback nonce. Control-port circuit detection is not implemented. |
 | Malicious relay | Sees only encrypted blobs + recipient onion hashes. Cannot decrypt, cannot link sender/recipient beyond timing correlation. |
 
 ---
 
 ## 4. Horizontal Scaling
 
-**Multiple relays are independent** — no coordination, no shared state.
-
-- **Discovery**: 3 relays published via IPNS (interplanetary naming system). Clients fetch relay list on startup.
-- **Load balancing**: Round-robin with failover. Client tries relay 1, on failure tries relay 2, then relay 3.
-- **No replication**: Blobs are not replicated across relays. If relay 1 loses a blob, relay 2 doesn't have it. Sender must re-send to another relay.
-- **No clustering**: Each relay is a standalone process. Adding capacity = deploy more relays, update IPNS record.
+Each `RelayClient` currently targets one configured relay URL. IPNS discovery,
+client-side multi-relay failover, replication, and clustering are not
+implemented. A relay restart loses its in-memory queue; the sender must enqueue
+again through its application-level retry path.
 
 ---
 
@@ -112,19 +151,18 @@ cargo build --release -p damz-relay
 
 ### 5.2 Tor Hidden Service
 
-Run as Tor onion service (via `arti` or system Tor):
+The relay currently expects a separately managed system Tor onion service that
+forwards to its loopback HTTP port. The Rust process does not bootstrap or
+control Tor itself.
 
-**torrc** (if using system Tor):
+**torrc**:
 ```
 HiddenServiceDir /var/lib/tor/relay/
 HiddenServicePort 80 127.0.0.1:3000
 ```
 
-**arti** (programmatic, preferred):
-```rust
-use arti_client::{TorClient, TorClientConfig};
-// Configure and bootstrap, then bind Axum to the Tor listener
-```
+Arti integration is not implemented. Do not treat the service as onion-hidden
+until the system Tor mapping is configured and verified in deployment.
 
 ### 5.3 Environment Variables
 
@@ -132,9 +170,10 @@ use arti_client::{TorClient, TorClientConfig};
 |----------|----------|---------|-------------|
 | `RELAY_PORT` | No | 3000 | HTTP port (inside Tor) |
 | `MAX_BLOBS` | No | 10000 | Max concurrent blobs in memory |
+| `MAX_BLOBS_PER_RECIPIENT` | No | 1000 | Max pending blobs for one recipient hash |
 | `MAX_BLOB_SIZE` | No | 65536 | Max blob size in bytes (64 KB) |
-| `DEFAULT_TTL_CHAT` | No | 86400 | Default TTL for chat messages (seconds) |
-| `DEFAULT_TTL_PROOF` | No | 604800 | Default TTL for proof keys (seconds) |
+| `MAX_TOTAL_BYTES` | No | 268435456 | Max total payload bytes in memory (256 MiB) |
+| `MAX_TTL_SECONDS` | No | 604800 | Max accepted `X-Expiry` TTL (7 days) |
 | `RUST_LOG` | No | info | Logging level (no sensitive data logged) |
 
 ### 5.4 Systemd Service (Example)
@@ -164,17 +203,17 @@ WantedBy=multi-user.target
 
 ```
 GET /health
-Response: 200 OK, { "status": "ok", "blobs_in_memory": 42 }
+Response: 200 OK, { "status": "ok", "blobs_in_memory": 42, "bytes_in_memory": 2048 }
 ```
 
 ---
 
 ## 6. Security Considerations
 
-- **No logging**: Zero log output for blob operations. Only startup/shutdown and error counts.
+- **No logging**: No request tracing or blob-operation logging. Only startup/shutdown messages.
 - **No metrics**: No Prometheus, no telemetry. Relay is a black box.
 - **Memory only**: Uses `HashMap<BlobId, BlobEntry>` with TTL sweep every 60s.
-- **Constant-time operations**: Blob retrieval/delete uses constant-time map access.
+- **Bounded memory**: Blob count, per-recipient count, total payload bytes, blob size, and TTL have configured limits.
 - **Tor isolation**: Each relay runs on separate VPS, separate Tor circuit.
 - **No authentication**: By design — anyone can PUT/GET. Rate limiting only by IP (Tor exit) at network level.
 
@@ -183,13 +222,16 @@ Response: 200 OK, { "status": "ok", "blobs_in_memory": 42 }
 ## 7. Testing
 
 ### 7.1 Unit Tests
-- TTL expiration logic
-- Blob size validation
-- Onion hash format validation
-- Memory eviction under pressure
+- Recipient inbox returns matching FIFO blobs and redelivers until acknowledgement
+- Acknowledgement deletes only the matching recipient's blob
+- Direct UUID retrieval removes a blob from its recipient inbox
+- TTL expiry removes blobs and releases queue/byte capacity
+- Blob size, TTL, and recipient hash validation
+- Global capacity remains correct under concurrent PUTs
 
 ### 7.2 Integration Tests
-- PUT → GET round-trip over local Tor
+- PUT → GET → acknowledge round-trip over local Tor
+- Recipient crash before acknowledgement receives the same blob again
 - Concurrent PUT/GET from multiple clients
 - Relay restart survival (client retry logic)
 - Expiry behavior (TTL sweep)

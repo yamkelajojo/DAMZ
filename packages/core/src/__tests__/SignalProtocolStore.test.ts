@@ -37,15 +37,29 @@ const mockDb = {
 
 (openDatabaseSync as jest.Mock).mockReturnValue(mockDb);
 
+/** 32 bytes, hex-encoded — the shape @damz/db's `getDatabaseKey()` produces. */
+const TEST_DB_KEY = 'a'.repeat(64);
+const CIPHER_VERSION_ROW = { cipher_version: '4.7.0 community' };
+
 describe('SignalProtocolStore', () => {
   let store: SignalProtocolStore;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
+    // The constructor probes `PRAGMA cipher_version` through `getFirstSync`, so
+    // reset the mock (dropping any unconsumed one-shot values) and install a
+    // base implementation before constructing. Individual tests keep using
+    // `mockReturnValueOnce` for row lookups.
+    mockDb.getFirstSync.mockReset();
+    mockDb.getFirstSync.mockImplementation((sql: string) =>
+      /cipher_version/i.test(sql) ? CIPHER_VERSION_ROW : undefined,
+    );
+    mockDb.execSync.mockReset();
+
     // Import after mocks are set up
     const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
-    store = new SignalProtocolStore('test_db_key');
+    store = new SignalProtocolStore(TEST_DB_KEY);
   });
 
   describe('Initialization', () => {
@@ -61,7 +75,7 @@ describe('SignalProtocolStore', () => {
       (SecureStore.setItemAsync as jest.Mock).mockResolvedValueOnce(undefined);
 
       const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
-      const newStore = new SignalProtocolStore('test_db_key');
+      const newStore = new SignalProtocolStore(TEST_DB_KEY);
 
       await newStore.getIdentityKeyPair();
 
@@ -77,11 +91,25 @@ describe('SignalProtocolStore', () => {
       (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce(JSON.stringify(mockKeyPair));
 
       const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
-      const newStore = new SignalProtocolStore('test_db_key');
+      const newStore = new SignalProtocolStore(TEST_DB_KEY);
 
       const keyPair = await newStore.getIdentityKeyPair();
 
       expect(keyPair).toEqual(mockKeyPair);
+    });
+
+    it('never returns the same material for the public and private identity keys', async () => {
+      const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
+      const newStore = new SignalProtocolStore(TEST_DB_KEY);
+
+      const keyPair = await newStore.getIdentityKeyPair();
+
+      expect(typeof keyPair.publicKey).toBe('string');
+      expect(typeof keyPair.privateKey).toBe('string');
+      expect(keyPair.publicKey.length).toBeGreaterThan(0);
+      expect(keyPair.privateKey.length).toBeGreaterThan(0);
+      // Regression guard: the public key must never disclose the private key.
+      expect(keyPair.publicKey).not.toBe(keyPair.privateKey);
     });
 
     it('should generate registration ID if not exists', async () => {
@@ -89,7 +117,7 @@ describe('SignalProtocolStore', () => {
       (SecureStore.setItemAsync as jest.Mock).mockResolvedValueOnce(undefined);
 
       const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
-      const newStore = new SignalProtocolStore('test_db_key');
+      const newStore = new SignalProtocolStore(TEST_DB_KEY);
 
       const regId = await newStore.getLocalRegistrationId();
 
@@ -105,7 +133,7 @@ describe('SignalProtocolStore', () => {
       await store.storePreKey(1, mockPreKey);
 
       expect(mockDb.runSync).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO signal_prekeys'),
+        expect.stringContaining('INSERT OR REPLACE INTO signal_prekeys'),
         expect.arrayContaining([1, expect.any(String)])
       );
     });
@@ -146,7 +174,7 @@ describe('SignalProtocolStore', () => {
       await store.storeSession(mockAddress, mockSession);
 
       expect(mockDb.runSync).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO signal_sessions'),
+        expect.stringContaining('INSERT OR REPLACE INTO signal_sessions'),
         expect.arrayContaining(['recipient', 1, expect.any(String)])
       );
     });
@@ -195,7 +223,7 @@ describe('SignalProtocolStore', () => {
       await store.storeSenderKey('group-1', mockSenderKey);
 
       expect(mockDb.runSync).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO signal_sender_keys'),
+        expect.stringContaining('INSERT OR REPLACE INTO signal_sender_keys'),
         expect.arrayContaining(['group-1', 1, expect.any(String)])
       );
     });
@@ -228,7 +256,7 @@ describe('SignalProtocolStore', () => {
 
       expect(trusted).toBe(true);
       expect(mockDb.runSync).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO signal_identity_keys'),
+        expect.stringContaining('INSERT OR REPLACE INTO signal_identity_keys'),
         expect.arrayContaining(['recipient', mockIdentityKey])
       );
     });
@@ -276,9 +304,60 @@ describe('SignalProtocolStore', () => {
       (SecureStore.setItemAsync as jest.Mock).mockRejectedValueOnce(new Error('Keychain error'));
 
       const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
-      const newStore = new SignalProtocolStore('test_db_key');
+      const newStore = new SignalProtocolStore(TEST_DB_KEY);
 
       await expect(newStore.getIdentityKeyPair()).rejects.toThrow('Keychain error');
+    });
+  });
+
+  describe('Encryption at rest', () => {
+    it('applies the SQLCipher key before creating any table', () => {
+      const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
+      mockDb.execSync.mockReset();
+
+      new SignalProtocolStore(TEST_DB_KEY);
+
+      const statements = mockDb.execSync.mock.calls.map((call) => call[0] as string);
+      const keyIndex = statements.findIndex((sql) => sql.includes('PRAGMA key'));
+      const tableIndex = statements.findIndex((sql) => sql.includes('CREATE TABLE'));
+
+      expect(keyIndex).toBeGreaterThanOrEqual(0);
+      expect(statements[keyIndex]).toContain(`PRAGMA key = "x'${TEST_DB_KEY}'"`);
+      expect(keyIndex).toBeLessThan(tableIndex);
+    });
+
+    it('opens the database without the silently-ignored `key` open option', () => {
+      expect(openDatabaseSync).toHaveBeenCalledWith('damz_signal.db');
+    });
+
+    it('refuses to open when SQLCipher is unavailable', () => {
+      const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
+      // `PRAGMA cipher_version` returns an empty row: SQLCipher is not compiled in.
+      mockDb.getFirstSync.mockImplementationOnce(() => ({}));
+
+      expect(() => new SignalProtocolStore(TEST_DB_KEY)).toThrow(/SQLCipher is not available/);
+    });
+
+    it('refuses a malformed database key', () => {
+      const { SignalProtocolStore } = require('../signal/SignalProtocolStore');
+
+      expect(() => new SignalProtocolStore('not-a-64-hex-key')).toThrow(/64-character hex/);
+    });
+  });
+
+  describe('Registration ID entropy', () => {
+    it('never derives the registration ID from Math.random', async () => {
+      const randomSpy = jest.spyOn(Math, 'random');
+      (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce(null);
+      (SecureStore.setItemAsync as jest.Mock).mockResolvedValueOnce(undefined);
+
+      const regId = await store.getLocalRegistrationId();
+
+      expect(randomSpy).not.toHaveBeenCalled();
+      expect(Number.isInteger(regId)).toBe(true);
+      expect(regId).toBeGreaterThanOrEqual(1);
+      expect(regId).toBeLessThanOrEqual(16380);
+      randomSpy.mockRestore();
     });
   });
 

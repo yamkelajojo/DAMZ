@@ -5,7 +5,32 @@
  * Meshkit for v1 simplicity, Helia for v2 decentralization.
  */
 
-import { createS3Client } from '@ipfs-meshkit/meshkit';
+import { createS3Client, MeshkitClient, UploadOptions, RetrieveOptions } from '@ipfs-meshkit/meshkit';
+
+/**
+ * WebCrypto handle for {@link IPFSStorage.encrypt} / {@link IPFSStorage.decrypt}.
+ *
+ * Deliberately not falling back to `require('crypto')`: that is a Node builtin a
+ * React Native bundle cannot resolve, so the fallback only ever turned a clear
+ * capability gap into a confusing module-resolution error on device.
+ */
+function requireWebCrypto() {
+  const available = globalThis.crypto;
+  if (!available || !available.subtle) {
+    throw new Error(
+      'AES-256-GCM requires WebCrypto, but globalThis.crypto.subtle is unavailable. ' +
+        'Node 19+ provides it natively; on React Native install a WebCrypto polyfill ' +
+        'before using IPFSStorage encryption.',
+    );
+  }
+  return available;
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
 
 export interface StorageBackend {
   upload(data: Uint8Array): Promise<string>; // Returns CID
@@ -20,9 +45,15 @@ export interface MeshkitConfig {
   secretAccessKey: string;
   bucket: string;
   endpoint: string; // MinIO .onion URL
-  region?: string;
 }
 
+/**
+ * Configuration for the opt-in Helia backend.
+ *
+ * Intentionally empty for now: `initializeHelia` is a fail-loud stub until Helia
+ * is wired up in v2, so there are no fields to configure yet.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface HeliaConfig {
   // Helia config for v2
   // Custom storage adapter for React Native
@@ -32,7 +63,7 @@ export type StorageBackendType = 'meshkit' | 'helia';
 
 export class IPFSStorage {
   private static instance: IPFSStorage;
-  private meshkitClient: any;
+  private meshkitClient: MeshkitClient | null = null;
   private heliaClient: any;
   private currentBackend: StorageBackendType = 'meshkit';
 
@@ -51,7 +82,6 @@ export class IPFSStorage {
       secretAccessKey: config.secretAccessKey,
       bucket: config.bucket,
       endpoint: config.endpoint,
-      region: config.region ?? 'auto',
     });
     this.currentBackend = 'meshkit';
   }
@@ -81,7 +111,8 @@ export class IPFSStorage {
       if (!this.meshkitClient) {
         throw new Error('Meshkit not initialized');
       }
-      const cid = await this.meshkitClient.upload(data);
+      const options: UploadOptions = {};
+      const cid = await this.meshkitClient.upload(data, options);
       return cid;
     }
 
@@ -89,8 +120,6 @@ export class IPFSStorage {
       if (!this.heliaClient) {
         throw new Error('Helia not initialized');
       }
-      // const cid = await this.heliaClient.addBytes(data);
-      // return cid.toString();
       throw new Error('Helia backend not yet implemented (v2)');
     }
 
@@ -102,7 +131,8 @@ export class IPFSStorage {
       if (!this.meshkitClient) {
         throw new Error('Meshkit not initialized');
       }
-      const data = await this.meshkitClient.download(cid);
+      const options: RetrieveOptions = {};
+      const data = await this.meshkitClient.retrieve(cid, options);
       return data;
     }
 
@@ -110,33 +140,50 @@ export class IPFSStorage {
   }
 
   async delete(cid: string): Promise<void> {
-    if (this.currentBackend === 'meshkit') {
-      if (!this.meshkitClient) {
-        throw new Error('Meshkit not initialized');
-      }
-      await this.meshkitClient.delete(cid);
-      return;
-    }
-
-    throw new Error('Helia delete not yet implemented (v2)');
+    // The meshkit S3 client has no delete operation. Silently succeeding here
+    // would let callers believe content was erased while it is still readable,
+    // which is a privacy problem for encrypted-but-addressable blobs.
+    throw new Error(
+      `IPFSStorage.delete(${cid}) is not implemented for the ${this.currentBackend} backend. ` +
+        'Delete the object through the S3 provider directly, or use a backend that supports deletion.'
+    );
   }
 
   async pin(cid: string): Promise<void> {
-    // Meshkit handles pinning via MinIO retention
-    // Helia would use IPFS pinning
+    if (this.currentBackend !== 'meshkit') {
+      throw new Error(
+        `IPFSStorage.pin is not implemented for the ${this.currentBackend} backend`
+      );
+    }
+    if (!this.meshkitClient) {
+      throw new Error('Meshkit not initialized');
+    }
+    await this.meshkitClient.pin(cid);
   }
 
   async unpin(cid: string): Promise<void> {
-    // Meshkit: delete from MinIO
-    // Helia: unpin from IPFS
+    // No unpin on the meshkit client — see `delete` above.
+    throw new Error(
+      `IPFSStorage.unpin(${cid}) is not implemented for the ${this.currentBackend} backend.`
+    );
   }
 
   // Encrypt data before upload (AES-256-GCM)
   static async encrypt(data: Uint8Array, key: Uint8Array): Promise<{ ciphertext: Uint8Array; iv: Uint8Array; tag: Uint8Array }> {
-    const crypto = globalThis.crypto || require('crypto').webcrypto;
+    const crypto = requireWebCrypto();
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['encrypt']);
-    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, data);
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      toArrayBuffer(key),
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt'],
+    );
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: toArrayBuffer(iv) },
+      cryptoKey,
+      toArrayBuffer(data),
+    );
     const tag = new Uint8Array(ciphertext.slice(-16));
     const encrypted = new Uint8Array(ciphertext.slice(0, -16));
     return { ciphertext: encrypted, iv, tag };
@@ -149,12 +196,22 @@ export class IPFSStorage {
     iv: Uint8Array,
     tag: Uint8Array
   ): Promise<Uint8Array> {
-    const crypto = globalThis.crypto || require('crypto').webcrypto;
-    const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['decrypt']);
+    const crypto = requireWebCrypto();
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      toArrayBuffer(key),
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt'],
+    );
     const combined = new Uint8Array(ciphertext.length + tag.length);
     combined.set(ciphertext);
     combined.set(tag, ciphertext.length);
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, combined);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: toArrayBuffer(iv) },
+      cryptoKey,
+      toArrayBuffer(combined),
+    );
     return new Uint8Array(decrypted);
   }
 }

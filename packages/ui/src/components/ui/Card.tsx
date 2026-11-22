@@ -6,8 +6,7 @@
  */
 
 import React, { type ReactNode } from 'react';
-import { StyleSheet, type ViewStyle } from 'react-native';
-import { View } from 'react-native';
+import { View, Pressable, type ViewStyle } from 'react-native';
 import { cn } from '../../utils/cn';
 
 export interface CardProps {
@@ -57,21 +56,33 @@ export function Card({
   style,
   onPress,
 }: CardProps) {
-  const Component = onPress ? 'Pressable' : View;
+  const surfaceStyle = [
+    { borderRadius: 16 } as ViewStyle,
+    variantStyles[variant],
+    paddingStyles[padding],
+    style,
+  ];
+
+  // A `Pressable` and a `View` take different props, so the element is chosen
+  // rather than switching on a string tag: `const Component = onPress ?
+  // 'Pressable' : View` produces a component that TypeScript cannot construct
+  // and that React would render as a host element named "Pressable".
+  if (onPress) {
+    return (
+      <Pressable
+        style={surfaceStyle}
+        className={cn(className)}
+        onPress={onPress}
+        accessibilityRole="button"
+      >
+        {children}
+      </Pressable>
+    );
+  }
 
   return (
-    <Component
-      style={[
-        { borderRadius: 16 },
-        variantStyles[variant],
-        paddingStyles[padding],
-        style,
-      ]}
-      className={cn(className)}
-      onPress={onPress}
-      accessibilityRole={onPress ? 'button' : undefined}
-    >
+    <View style={surfaceStyle} className={cn(className)}>
       {children}
-    </Component>
+    </View>
   );
 }

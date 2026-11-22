@@ -1,0 +1,28 @@
+[package]
+name = "damz-pinner"
+description = "IPFS pinning service for DAMZ proof bundles"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+bytes = { workspace = true }
+time = { workspace = true }
+
+# Tor
+arti-client = { workspace = true }
+
+# IPFS - stub; real IPFS stack delayed to avoid yanked dependency chain
+cid = "0.11"
+multihash = "0.19"

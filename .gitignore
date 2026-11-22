@@ -1,0 +1,61 @@
+# --- Dependencies ---
+node_modules
+
+# --- Turborepo ---
+.turbo/
+
+# --- Local Gradle distribution (manual download; the wrapper resolves
+# gradle-9.8.0 from ~/.gradle/wrapper/dists instead) ---
+/gradle-9.8.0/
+/target/
+
+# --- Expo / React Native ---
+.expo/
+.expo-shared/
+*.jsbundle
+# Written by `expo start` / `expo customize`; regenerate on demand.
+# (`nativewind-env.d.ts` is deliberately NOT ignored — NativeWind asks for it to
+# be committed alongside the source.)
+expo-env.d.ts
+
+# --- Android (bare workflow) ---
+**/android/.gradle/
+**/android/build/
+**/android/app/build/
+**/android/.cxx/
+**/android/local.properties
+**/android/app/src/main/assets/index.android.bundle
+
+# --- Signing / secrets (never commit these) ---
+*.jks
+*.p12
+*.key
+release.keystore
+.env
+.env.*
+!.env.example
+
+# --- Build output ---
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Editor / OS ---
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- VCS noise ---
+*.orig
+*.rej

@@ -219,24 +219,29 @@ const fontSize = {
   priceLarge: ['28px', { lineHeight: '36px', fontWeight: '700', letterSpacing: '-0.02em' }],
 };
 
-// Generate tailwind.config.js
-const tailwindConfig = `/** @type {import('tailwindcss').Config} */
-module.exports = {
+// ── The config, as data ──────────────────────────────────────────────────────
+// Built as a real object and serialised below, rather than written as one large
+// template literal. With a literal, every nested reference has to be written out
+// by hand as `${light.text.primary}`, and a single missing `${}` silently emits
+// the *source text* (`light.text.primary`) into the generated file: valid-looking
+// JavaScript that resolves to nothing and only fails when Tailwind loads it.
+const config = {
   content: [
     './src/**/*.{js,jsx,ts,tsx}',
     '../../apps/*/src/**/*.{js,jsx,ts,tsx}',
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
         // DAMZ Brand
         damz: {
-          primary: '${DAMZ_PRIMARY}',
+          primary: DAMZ_PRIMARY,
           primaryPressed: '#E6C200',
-          black: '${DAMZ_BLACK}',
-          white: '${DAMZ_WHITE}',
+          black: DAMZ_BLACK,
+          white: DAMZ_WHITE,
         },
-        // Semantic Light
+        // Semantic light
         bg: {
           primary: light.background.primary,
           secondary: light.background.secondary,
@@ -296,7 +301,7 @@ module.exports = {
             strong: light.status.error.strong,
           },
         },
-        // Semantic Dark (NativeWind handles dark: automatically via class strategy)
+        // Semantic dark (NativeWind applies these through the `dark` class)
         dark: {
           bg: {
             primary: dark.background.primary,
@@ -397,11 +402,7 @@ module.exports = {
         primary: fontFamily.primary,
         mono: fontFamily.mono,
       },
-      fontSize: {
-        ...Object.fromEntries(
-          Object.entries(fontSize).map(([key, val]) => [key, val])
-        ),
-      },
+      fontSize: { ...fontSize },
       fontWeight: {
         black: '900',
         extrabold: '800',
@@ -437,9 +438,38 @@ module.exports = {
     },
   },
   plugins: [],
-  darkMode: 'class',
+};
+
+// ── Emit ─────────────────────────────────────────────────────────────────────
+// `JSON.stringify` handles quoting (an unquoted `#FFFCF9` would not parse) and
+// indentation; the brace lines are stripped so the generated keys can be nested
+// one level inside `module.exports`.
+const indent = (block: string) =>
+  block
+    .split('\n')
+    .slice(1, -1)
+    .map((line) => (line.trim() === '' ? line : `  ${line}`))
+    .join('\n');
+
+const tailwindConfig = `/**
+ * GENERATED FILE — do not edit by hand.
+ *
+ * Source: packages/ui/scripts/generate-tailwind-config.ts
+ * Regenerate: bun run tailwind:generate   (from packages/ui)
+ *
+ * \`@type {import('tailwindcss').Config}\`
+ */
+module.exports = {
+  // NativeWind v4 refuses to start unless its own preset is in the presets
+  // chain ("Tailwind CSS has not been configured with the NativeWind preset"),
+  // so it is listed ahead of the generated keys.
+  presets: [require('nativewind/preset')],
+${indent(JSON.stringify(config, null, 2))}
 };
 `;
 
-writeFileSync(resolve(__dirname, '../../tailwind.config.js'), tailwindConfig);
-console.log('✅ Generated tailwind.config.js');
+// Written next to this package's sources, not to the repository root: the
+// `content` globs above are relative to the *directory that loads the config*,
+// and both `packages/ui` and `apps/*` sit two levels below the repository root.
+writeFileSync(resolve(__dirname, '../tailwind.config.js'), tailwindConfig);
+console.log('✅ Generated packages/ui/tailwind.config.js');

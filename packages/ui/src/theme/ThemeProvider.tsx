@@ -22,10 +22,44 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'damz_theme_mode';
 
+/**
+ * The web-only `darkMode: 'class'` toggle.
+ *
+ * `document` is reached through `globalThis` with a structural type instead of
+ * the DOM lib: this package also builds for React Native, and pulling in `DOM`
+ * would let native-only files reference browser globals without a `typeof` guard.
+ */
+type WebDocument = {
+  documentElement: { classList: { toggle: (token: string, force?: boolean) => void } };
+};
+
+function applyWebDarkClass(isDark: boolean): void {
+  const webDocument = (globalThis as { document?: WebDocument }).document;
+  webDocument?.documentElement.classList.toggle('dark', isDark);
+}
+
+/**
+ * `ColorSchemeName` is `'light' | 'dark' | 'unspecified'` in current React
+ * Native, and the appearance APIs may also return `null`/`undefined`; only
+ * light and dark are themes.
+ */
+function toTheme(colorScheme: ColorSchemeName | null | undefined): 'light' | 'dark' {
+  return colorScheme === 'dark' ? 'dark' : 'light';
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('system');
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
+  // Tracked so a change to the OS appearance re-renders. The resolved theme is
+  // derived during render rather than mirrored into state: storing it would mean
+  // calling setState from an effect, which triggers a second render pass for a
+  // value that is already computable (see react.dev, "You Might Not Need an
+  // Effect").
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() =>
+    toTheme(Appearance.getColorScheme()),
+  );
+
+  const resolvedTheme: 'light' | 'dark' = mode === 'system' ? systemTheme : mode;
 
   // Load persisted mode on mount
   useEffect(() => {
@@ -42,40 +76,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  // Resolve theme from mode + system preference
+  // Listen for system theme changes. setState happens only inside the
+  // subscription callback, never directly in the effect body.
   useEffect(() => {
-    if (!mounted) return;
-
-    const resolve = (m: ThemeMode) => {
-      if (m === 'system') {
-        return Appearance.getColorScheme() ?? 'light';
-      }
-      return m;
-    };
-
-    const theme = resolve(mode);
-    setResolvedTheme(theme);
-
-    // Apply to document for NativeWind darkMode: 'class'
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('dark', theme === 'dark');
-    }
-  }, [mode, mounted]);
-
-  // Listen for system theme changes
-  useEffect(() => {
-    if (!mounted || mode !== 'system') return;
-
     const subscription = Appearance.addChangeListener(({ colorScheme }) => {
-      const theme = colorScheme ?? 'light';
-      setResolvedTheme(theme);
-      if (typeof document !== 'undefined') {
-        document.documentElement.classList.toggle('dark', theme === 'dark');
-      }
+      setSystemTheme(toTheme(colorScheme));
     });
 
     return () => subscription?.remove?.();
-  }, [mode, mounted]);
+  }, []);
+
+  // Apply to the document for NativeWind's `darkMode: 'class'` (web only).
+  // Updating an external system is what an effect is for.
+  useEffect(() => {
+    if (!mounted) return;
+    applyWebDarkClass(resolvedTheme === 'dark');
+  }, [resolvedTheme, mounted]);
 
   const setMode = useCallback(async (newMode: ThemeMode) => {
     setModeState(newMode);

@@ -6,12 +6,20 @@
  */
 
 import React, { forwardRef, type ReactNode } from 'react';
-import { StyleSheet, type ViewStyle, type TextStyle, TextInput } from 'react-native';
+import { View, Text, TextInput } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
-import { View, Text, TextInput as RNTextInput } from 'react-native';
+import { cssInterop } from 'nativewind';
 import { cn } from '../../utils/cn';
 
-export interface InputProps extends React.ComponentPropsWithoutRef<typeof RNTextInput> {
+/**
+ * `Animated` has no `TextInput` member in Reanimated 3, so the wrapper is created
+ * explicitly; `cssInterop` restores NativeWind's `className` support.
+ */
+const AnimatedTextInput = cssInterop(Animated.createAnimatedComponent(TextInput), {
+  className: 'style',
+});
+
+export interface InputProps extends React.ComponentPropsWithoutRef<typeof TextInput> {
   label?: string;
   error?: string;
   helperText?: string;
@@ -19,9 +27,17 @@ export interface InputProps extends React.ComponentPropsWithoutRef<typeof RNText
   rightIcon?: ReactNode;
   className?: string;
   containerClassName?: string;
+  /**
+   * `TextInput` has no `disabled` prop — the native name is `editable`. It is
+   * accepted here because a form field reads better as `<Input disabled />`, and
+   * mapped onto `editable` below.
+   */
+  disabled?: boolean;
+  /** Marks the label with an asterisk. Purely presentational. */
+  required?: boolean;
 }
 
-const Input = forwardRef<RNTextInput, InputProps>(
+const Input = forwardRef<TextInput, InputProps>(
   (
     {
       label,
@@ -59,8 +75,6 @@ const Input = forwardRef<RNTextInput, InputProps>(
       labelColor.value = withTiming('#6B625C', { duration: 150 });
     };
 
-    const hasError = Boolean(error);
-
     return (
       <View className={cn('gap-2 w-full', containerClassName)}>
         {label && (
@@ -73,7 +87,7 @@ const Input = forwardRef<RNTextInput, InputProps>(
             {label} {required && <Text style={{ color: '#B42318' }}>*</Text>}
           </Animated.Text>
         )}
-        <View
+        <Animated.View
           style={[
             {
               flexDirection: 'row',
@@ -89,7 +103,7 @@ const Input = forwardRef<RNTextInput, InputProps>(
           ]}
         >
           {leftIcon && <View style={{ paddingLeft: 4 }}>{leftIcon}</View>}
-          <Animated.TextInput
+          <AnimatedTextInput
             ref={ref}
             style={[
               {
@@ -105,11 +119,12 @@ const Input = forwardRef<RNTextInput, InputProps>(
             className={cn(className)}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            disabled={disabled}
+            editable={!disabled}
+            accessibilityState={{ disabled: Boolean(disabled) }}
             {...props}
           />
           {rightIcon && <View style={{ paddingRight: 4 }}>{rightIcon}</View>}
-        </View>
+        </Animated.View>
         {(error || helperText) && (
           <Text
             style={[

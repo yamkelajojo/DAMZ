@@ -118,3 +118,41 @@ sequence be reassessed before deployment.
   **Owner**: Admin/Developer. **Target resolution**: before the Phase 1 SQLCipher upgrade /
   release gate. Any adapter or storage-architecture replacement requires a separate ADR and
   user confirmation.
+
+## Addendum — schema v3 and migration freezing (2026-10-17)
+
+**Status**: Applied. This addendum records changes made while hardening the database
+package; it does not rewrite the decisions above.
+
+1. **`swaps` retention (v3 migration).** `THREAT-MODEL.md` requires the `swaps` table to
+   purge 90 days after completion. No such purge existed: `swaps` had no `purge_after`
+   column and no purge path. Schema version advances to 3 with one additive migration that
+   adds `swaps.purge_after` and backfills it from `completed_at` for rows that already
+   completed. `purgeExpiredData` deletes expired swaps and cascades `swap_events`, guarding
+   on a terminal status so a swap with funds in transit is never deleted. Under the
+   additive-minor rule of the OQ-SCHEMA-001 resolution, `@damz/db` advances 1.1.0 → 1.2.0.
+
+2. **The v2 steps no longer read the live schema — this supersedes the OQ-SCHEMA-001
+   resolution's wording.** That resolution states the v2 steps create their tables "from
+   the shared raw table-definition specs from which `appSchema` is built". Because
+   `createTable()` re-reads those specs at migration *encode* time, the v2 step grew
+   whenever the schema did: adding `swaps.purge_after` in v3 made the v2 step create the
+   column, after which the v3 `addColumns` step issued `alter table "swaps" add
+   "purge_after"` against a table that already had it — a duplicate-column error that would
+   break every v1 → v3 upgrade. The v2 steps now use the frozen snapshot in
+   `packages/db/src/migrations/v2-tables.ts`. Migrations describe the schema as it was when
+   that version shipped and must never track the current schema.
+
+3. **The schema validator now encodes §6 instead of a blanket rule.** The validator
+   demanded `purge_after` on every table except a hard-coded five, which contradicted
+   `DB_LAYOUT_AND_ARCH.md` §6 (which purges most tables by cascade, sync replacement, or
+   user-initiated wipe) and left the script permanently red with 11 errors — so it could no
+   longer flag a new violation, and its `errors`/`warnings` split was recomputed by string
+   matching two lines later. Retention is now a per-table decision (`REQUIRES_PURGE_AFTER`
+   or `RETAINED_BY_OTHER_MEANS`), and a table in neither bucket is an error. This
+   implements OQ-SCHEMA-002's requirement that the validator fail when a required column is
+   missing rather than reporting success on an unparsed schema.
+
+4. **Release gate unchanged.** A real v1 → v3 SQLCipher device upgrade test and an
+   on-device proof that the file is unreadable without the key remain required; the new
+   unit-level migration assertions are not a substitute.

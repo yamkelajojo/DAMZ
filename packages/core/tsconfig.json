@@ -4,9 +4,11 @@
     "baseUrl": ".",
     "paths": {
       "@damz/types": ["../types/src"],
-      "@damz/db": ["../db/src"]
-    }
+      "@damz/db": ["../db/src"],
+      "react-native": ["../node_modules/react-native"]
+    },
+    "types": ["jest", "node"]
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*", "types/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "src/__tests__/**/*"]
 }

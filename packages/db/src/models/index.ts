@@ -6,14 +6,16 @@
  */
 
 import { Model } from '@nozbe/watermelondb';
-import { field, text, date, readonly, children } from '@nozbe/watermelondb/decorators';
+import { field, text, date } from '@nozbe/watermelondb/decorators';
 import { Associations } from '@nozbe/watermelondb/Model';
 
 export class Identity extends Model {
   static table = 'identity';
-  static associations: Associations = {
-    contacts: { type: 'has_many', foreignKey: 'did' },
-  };
+  // No associations. `contacts.did` is the *peer's* DID, not a reference to this
+  // device's identity row, so a `has_many` keyed on `did` (removed here) matched
+  // only the contact whose DID happened to equal this device's own DID — i.e.
+  // nothing. Contacts are listed with `database.get('contacts').query()`.
+  static associations: Associations = {};
 
   @text('did') did!: string;
   @text('display_name') displayName!: string | undefined;
@@ -23,14 +25,15 @@ export class Identity extends Model {
   @text('onion_address') onionAddress!: string | undefined;
   @date('created_at') createdAt!: Date;
   @date('updated_at') updatedAt!: Date;
-
-  @children('contacts') contacts!: any;
 }
 
 export class Contact extends Model {
   static table = 'contacts';
+  // No `identity` association: `contacts.did` is the peer's DID, and a
+  // `belongs_to` keyed on `did` resolved it against *this* device's identity
+  // row. The order/message links below are real — they key on a column that
+  // holds a contact's DID.
   static associations: Associations = {
-    identity: { type: 'belongs_to', key: 'did' },
     ordersAsCustomer: { type: 'has_many', foreignKey: 'customer_did' },
     ordersAsRunner: { type: 'has_many', foreignKey: 'runner_did' },
     messages: { type: 'has_many', foreignKey: 'sender_did' },
@@ -59,9 +62,11 @@ export class CatalogItem extends Model {
 
 export class PriceList extends Model {
   static table = 'price_lists';
+  // No `orders` association: `orders` has no `price_list_id` column — the price
+  // snapshot is copied onto `order_items` at order time. A `has_many` keyed on
+  // `price_list_id` generated SQL against a column that does not exist.
   static associations: Associations = {
     runnerPrices: { type: 'has_many', foreignKey: 'price_list_id' },
-    orders: { type: 'has_many', foreignKey: 'price_list_id' },
   };
 
   @text('runner_did') runnerDid!: string;
@@ -109,6 +114,7 @@ export class Swap extends Model {
   @field('network_fee_btc') networkFeeBtc!: number | undefined;
   @field('network_fee_xmr') networkFeeXmr!: number | undefined;
   @field('service_fee_zar') serviceFeeZar!: number | undefined;
+  @field('purge_after') purgeAfter!: number | undefined;
 }
 
 export class ExchangeOffer extends Model {

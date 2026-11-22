@@ -1,0 +1,13 @@
+/*
+ * NativeWind entry point (wired up as `input` in metro.config.js).
+ *
+ * The `@tailwind` directives must live in this file: it is the one NativeWind
+ * hands to Tailwind, so directives that only existed in the imported theme
+ * would never be expanded. The imported file carries the design system's CSS
+ * variables and base element styles.
+ */
+@import "../../packages/ui/src/global.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

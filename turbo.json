@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "pipeline": {
+  "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "build/**", ".expo/**", "target/**"]
@@ -19,9 +19,6 @@
     "test:watch": {
       "cache": false,
       "persistent": true
-    },
-    "db:generate": {
-      "outputs": ["packages/db/src/generated/**"]
     },
     "clean": {
       "cache": false

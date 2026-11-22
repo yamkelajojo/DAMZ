@@ -54,7 +54,7 @@ export function variant<T extends Record<string, Record<string, string>>>(
   return (props) => {
     const { className, ...variantProps } = props;
     const variantClasses = Object.entries(variantProps)
-      .map(([key, value]) => variants[key]?.[value])
+      .map(([key, value]) => (value ? variants[key]?.[value] : undefined))
       .filter(Boolean)
       .join(' ');
     return cn(base, variantClasses, className);

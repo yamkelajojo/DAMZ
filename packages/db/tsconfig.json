@@ -3,10 +3,12 @@
   "compilerOptions": {
     "baseUrl": ".",
     "experimentalDecorators": true,
+    "lib": ["ES2022", "DOM"],
     "paths": {
       "@damz/types": ["../types/src"]
-    }
+    },
+    "types": ["bun-types", "jest"]
   },
-  "include": ["src/**/*", "scripts/**/*"],
+  "include": ["src/**/*", "scripts/**/*", "types/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

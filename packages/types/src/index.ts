@@ -17,7 +17,21 @@ export type DID = z.infer<typeof DIDSchema>;
 export const OnionAddressSchema = z.string().regex(/^[a-z2-7]{56}\.onion$/);
 export type OnionAddress = z.infer<typeof OnionAddressSchema>;
 
-export const CIDSchema = z.string().regex(/^(Qm|bafy)[a-zA-Z0-9]{44,}$/);
+/**
+ * Content identifier (CID).
+ *
+ * - CIDv0: `Qm` + 44 base58btc characters (46 total). `Qm` is the only prefix a
+ *   sha2-256 dag-pb CIDv0 can carry.
+ * - CIDv1 in multibase base32-lower: `b` + at least 58 base32 characters. That
+ *   covers both `bafy…` (dag-pb) and `bafk…` (raw codec).
+ *
+ * The previous pattern was `/^(Qm|bafy)[a-zA-Z0-9]{44,}$/`, which rejected every
+ * CID the app's own storage layer produces: meshkit's S3 client computes
+ * `CID.create(1, raw.code, sha256)` — the **raw** codec, whose CIDv1 prefix is
+ * `bafk`, not `bafy`. Any proof bundle, order or dispute referencing a genuine
+ * `proof_cid` failed validation.
+ */
+export const CIDSchema = z.string().regex(/^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,})$/);
 export type CID = z.infer<typeof CIDSchema>;
 
 export const MoneroAddressSchema = z.string().regex(/^[48][a-zA-Z0-9]{94}$/);
@@ -38,7 +52,15 @@ export type Timestamp = z.infer<typeof TimestampSchema>;
 export const UUIDSchema = z.string().uuid();
 export type UUID = z.infer<typeof UUIDSchema>;
 
-export const GeohashSchema = z.string().regex(/^[0-9a-z]{1,12}$/);
+/**
+ * Geohash.
+ *
+ * The encoding's base-32 alphabet omits `a`, `i`, `l` and `o`, and 12 characters
+ * is the maximum precision. This matches `ZKProofManager.verifyCoarseGeohash`,
+ * which rejects strings outside that alphabet — the previous `[0-9a-z]` pattern
+ * accepted values such as `"ai"` that the verifier then refused.
+ */
+export const GeohashSchema = z.string().regex(/^[0123456789bcdefghjkmnpqrstuvwxyz]{1,12}$/);
 export type Geohash = z.infer<typeof GeohashSchema>;
 
 // ============================================================================
